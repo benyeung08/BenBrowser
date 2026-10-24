@@ -1,4 +1,4 @@
-name: nimbus_browser
+name: ben_browser
 description: >-
   基于 Flutter + 系统原生 WebView 的轻量自研浏览器，一套代码覆盖
   Android / Windows / macOS。

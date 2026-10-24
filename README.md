@@ -99,6 +99,23 @@ flutter pub get
 等价于 CI 的 verify 步骤：`flutter pub get` → `flutter analyze lib test` → `flutter test`。
 CI 只把 error 当失败（`--no-fatal-infos --no-fatal-warnings`），所以看到红叉时盯 error 那几行就行。
 
+只想看 error 行：
+
+```bash
+./tool/analyze_errors.sh     # 只输出「error | 文件:行:列 | 错误码」
+```
+
+### 踩过的坑（写代码时留意）
+
+- **Dart 没有传递导入**：用到 `bookmarksProvider` / `tabsProvider` 就要 import
+  它们所在的 `state/providers.dart` / `state/tabs_controller.dart`，靠别的文件间接引过来不算
+- **const 表达式里不能访问实例字段**：`SearchEngine.bing.id` 不能做 const 默认值，
+  要另开 `static const String defaultId`
+- **`?? const []` 会推断成 `List<Never>`**，后续元素访问判类型错误，要写 `?? <Bookmark>[]`
+- **插件回调别写 `return null`**：`onDownloadStartRequest` 是 void 签名，
+  写 async 但不要 return，能同时兼容 `void` 与 `FutureOr<T?>`
+- **`useOnDownloadStart: true`** 必须显式设置，否则 6.x 的下载回调根本不触发
+
 ## 推送到你自己的 GitHub
 
 ```bash
