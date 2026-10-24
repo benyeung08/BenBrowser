@@ -5,6 +5,10 @@ import '../../core/constants.dart';
 import '../../core/platform_info.dart';
 import '../../core/url_utils.dart';
 import '../../data/models/browser_tab.dart';
+// ★ bookmarksProvider / bookmarkRepositoryProvider / tabsProvider 定义在这里，
+//   漏掉这两行就会报 undefined_identifier
+import '../../state/providers.dart';
+import '../../state/tabs_controller.dart';
 import '../bookmarks/bookmarks_page.dart';
 import '../downloads/downloads_page.dart';
 import '../history/history_page.dart';

@@ -47,6 +47,8 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
         userAgent: settings?.effectiveUserAgent,
         incognito: tab.incognito,
         cacheEnabled: !tab.incognito,
+        // 6.x 必须显式打开这个开关，onDownloadStartRequest 才会被回调
+        useOnDownloadStart: true,
       ),
       onWebViewCreated: (controller) {
         _registry.register(tab.id, controller);
@@ -70,7 +72,8 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
         await _syncNavState(controller);
       },
       // 下载：交给统一的下载管理器（Dio），避免各平台下载器行为不一致。
-      // 返回 null 表示不拦截内核自带的下载流程（6.x 的 DownloadStartResponse）
+      // 写成 async 是为了同时兼容插件的 void 与 FutureOr<...> 两种回调签名；
+      // 不要写 return null —— 那会触发 avoid_returning_null_for_void。
       onDownloadStartRequest: (controller, request) async {
         final url = request.url.toString();
         ref.read(downloadsProvider.notifier).start(url);
@@ -79,7 +82,6 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
             const SnackBar(content: Text('已开始下载，可在菜单 → 下载中查看')),
           );
         }
-        return null;
       },
       // target=_blank 的链接改为在新标签打开
       onCreateWindow: (controller, action) async {
