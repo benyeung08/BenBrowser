@@ -21,7 +21,7 @@ class DownloadsController extends Notifier<List<DownloadTask>> {
 
   Future<Directory> get _downloadDir async {
     final base = await getApplicationDocumentsDirectory();
-    final dir = Directory(p.join(base.path, 'Nimbus', 'Downloads'));
+    final dir = Directory(p.join(base.path, 'BenBrowser', 'Downloads'));
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir;
   }
