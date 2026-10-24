@@ -69,19 +69,16 @@ enum BrowserAction { back, forward, reload, stop, home }
 
 /// 清除浏览数据（缓存 + 本地历史）
 Future<void> clearBrowsingData(WidgetRef ref) async {
-  final registry = ref.read(webViewRegistryProvider);
-  final tabs = ref.read(tabsProvider);
-  for (final t in tabs.tabs) {
-    final c = registry.get(t.id);
-    if (c == null) continue;
-    try {
-      // 6.x 里 clearCache 已废弃，官方建议用 clearAllCache
-      await c.clearAllCache();
-    } catch (_) {
-      // Windows 内核未实现时忽略，仅清理本地数据
-    }
-  }
   final history = await ref.read(historyRepositoryProvider.future);
   await history.clear();
   ref.invalidate(historyProvider);
+
+  // 清缓存：clearAllCache 是 InAppWebViewController 的**静态方法**，
+  // 必须用类名调用，不能用实例（instance_access_to_static_member）。
+  // 它一次性清掉全局缓存，所以循环里逐个 controller 调用是多余的。
+  try {
+    await InAppWebViewController.clearAllCache();
+  } catch (_) {
+    // Windows 内核未实现时忽略，仅清理本地数据
+  }
 }
