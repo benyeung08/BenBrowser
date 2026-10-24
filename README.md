@@ -1,4 +1,4 @@
-# Nimbus Browser
+# BenBrowser
 
 基于 **Flutter + 系统原生 WebView** 的个人自研浏览器：一份 Dart 代码，同时跑在 **Android / Windows / macOS** 上，靠 GitHub Actions 自动出三端安装包。
 
@@ -67,17 +67,54 @@ Windows 用户在 PowerShell 里执行 `.\tool\bootstrap.ps1`。
 ORG=com.yourname ./tool/bootstrap.sh
 ```
 
+## 改应用名
+
+想把 BenBrowser 换成你自己的名字，一条命令搞定（Windows 上把 `python3` 换成 `python`）：
+
+```bash
+python3 tool/rename.py "MyBrowser" --org com.myname
+python3 tool/rename.py "MyBrowser" --dry-run     # 先预览会改哪些文件
+./tool/bootstrap.sh                              # 改名后重新生成原生壳
+flutter pub get
+```
+
+脚本会自动重写四处名字：
+
+| 项目 | 来源 | 示例 |
+| --- | --- | --- |
+| 显示名（窗口标题 / 新标签页） | 原样使用 | `MyBrowser` |
+| Dart 包名（`pubspec` / `import`） | 自动 slug 化 | `my_browser` |
+| Android / iOS 包名 | `--org` 指定 | `com.myname.my_browser` |
+| CI 产物名 | 跟随显示名 | `MyBrowser-windows-x64.zip` |
+
+名字里带英文别名的写法也可以：`python3 tool/rename.py "小浏览器 MyBrowser"`。
+纯中文名不行——`pubspec` 的 `name` 只允许 `a-z0-9_`，脚本会提示加上英文别名。
+
+## 本地自检（push 前先跑）
+
+```bash
+./tool/check.sh
+```
+
+等价于 CI 的 verify 步骤：`flutter pub get` → `flutter analyze lib test` → `flutter test`。
+CI 只把 error 当失败（`--no-fatal-infos --no-fatal-warnings`），所以看到红叉时盯 error 那几行就行。
+
 ## 推送到你自己的 GitHub
 
 ```bash
-git init && git add . && git commit -m "feat: init nimbus browser"
-git remote add origin git@github.com:<你的账号>/nimbus_browser.git
+git init && git add . && git commit -m "feat: init BenBrowser"
+git remote add origin git@github.com:<你的账号>/ben_browser.git
 git push -u origin main
 ```
 
 - 推 `main` / 提 PR → 跑 analyze + test
 - 打 tag `git tag v0.1.0 && git push --tags` → 自动构建并在 Release 挂上：
-  `nimbus-android（3 个 ABI 的 APK）`、`Nimbus-windows-x64.zip`、`Nimbus-macos.zip`
+  `benbrowser-android（3 个 ABI 的 APK）`、`BenBrowser-windows-x64.zip`、`BenBrowser-macos.zip`
+
+> CI 里的 `flutter create` 会用模板覆盖 `lib/main.dart`，还会生成引用 `MyApp` 的
+> `test/widget_test.dart`。workflow 已经做了备份还原 + 删除模板测试，本地跑
+> `tool/bootstrap.sh` 也一样处理。如果你自己改了 workflow，记得保留这两步，
+> 否则打出来的包会是计数器 demo。
 
 ## 架构要点
 
@@ -85,7 +122,7 @@ git push -u origin main
 - **控制器托管**：`InAppWebViewController` 不进状态类，统一放 `webViewRegistryProvider`（`tabId → controller`），避免状态对象持有原生句柄
 - **标签渲染**：`IndexedStack` 保持所有标签存活，关闭时从 registry 摘除 controller
 - **存储**：`SharedPreferences` + JSON，三端零权限；数据量大了可平滑换成 Isar / Drift，只需替换 repository 实现
-- **下载**：不走各平台自带下载器，统一 Dio 落到应用数据目录下的 `Nimbus/Downloads`，Android 13+ 无需存储权限
+- **下载**：不走各平台自带下载器，统一 Dio 落到应用数据目录下的 `BenBrowser/Downloads`，Android 13+ 无需存储权限
 
 ## 平台注意事项
 
