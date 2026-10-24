@@ -11,34 +11,33 @@ class BookmarkRepository {
   List<Bookmark>? _cache;
 
   Future<List<Bookmark>> all() async {
-    if (_cache != null) return _cache!;
-    _cache = _store
-        .readList(_key)
-        .map(Bookmark.fromJson)
-        .toList()
+    final cached = _cache;
+    if (cached != null) return cached;
+
+    final list = _store.readList(_key).map(Bookmark.fromJson).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return _cache!;
+    _cache = list;
+    return list;
   }
 
   Future<bool> exists(String url) async =>
       (await all()).any((b) => b.url == url);
 
   Future<void> add({required String title, required String url}) async {
-    final list = await all();
+    final list = (await all()).toList();
     if (list.any((b) => b.url == url)) return;
     list.insert(0, Bookmark.create(title: title, url: url));
     await _persist(list);
   }
 
   Future<void> remove(String id) async {
-    final list = await all();
-    list.removeWhere((b) => b.id == id);
+    final list = (await all()).toList()..removeWhere((b) => b.id == id);
     await _persist(list);
   }
 
   Future<void> clear() async {
     _cache = <Bookmark>[];
-    await _store.writeList(_key, const []);
+    await _store.writeList(_key, const <Map<String, dynamic>>[]);
   }
 
   Future<void> _persist(List<Bookmark> list) async {

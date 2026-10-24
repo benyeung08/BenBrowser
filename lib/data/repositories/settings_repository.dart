@@ -13,16 +13,29 @@ class SettingsRepository {
   AppSettings? _cache;
 
   Future<AppSettings> load() async {
-    if (_cache != null) return _cache!;
+    final cached = _cache;
+    if (cached != null) return cached;
+
     final raw = _store.readString(_key);
-    if (raw == null || raw.isEmpty) return AppSettings();
-    try {
-      final decoded = jsonDecodeSafe(raw);
-      _cache = AppSettings.fromJson(decoded);
-    } catch (_) {
-      _cache = AppSettings();
+    if (raw == null || raw.isEmpty) {
+      final defaults = AppSettings();
+      _cache = defaults;
+      return defaults;
     }
-    return _cache!;
+
+    AppSettings parsed;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        parsed = AppSettings.fromJson(decoded.cast<String, dynamic>());
+      } else {
+        parsed = AppSettings();
+      }
+    } catch (_) {
+      parsed = AppSettings();
+    }
+    _cache = parsed;
+    return parsed;
   }
 
   Future<void> save(AppSettings settings) async {
@@ -30,6 +43,3 @@ class SettingsRepository {
     await _store.writeString(_key, jsonEncode(settings.toJson()));
   }
 }
-
-Map<String, dynamic> jsonDecodeSafe(String raw) =>
-    (jsonDecode(raw) as Map).cast<String, dynamic>();
