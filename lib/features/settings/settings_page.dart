@@ -56,16 +56,21 @@ class SettingsPage extends ConsumerWidget {
             _DropdownTile<String>(
               label: 'User-Agent',
               value: settings.userAgentModeId,
-              items: const ['system', 'desktop', 'mobile', 'custom'],
+              items: const [
+                UserAgentPreset.systemId,
+                'desktop',
+                'mobile',
+                UserAgentPreset.customId,
+              ],
               labelOf: (id) => switch (id) {
-                'custom' => '自定义',
+                UserAgentPreset.customId => '自定义',
                 _ => UserAgentPreset.fromId(id).label,
               },
               onChanged: (id) => ref
                   .read(settingsProvider.notifier)
                   .patch((s) => s.copyWith(userAgentModeId: id)),
             ),
-            if (settings.userAgentModeId == 'custom')
+            if (settings.userAgentModeId == UserAgentPreset.customId)
               _TextTile(
                 label: '自定义 UA',
                 value: settings.customUserAgent,
