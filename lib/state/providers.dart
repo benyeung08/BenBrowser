@@ -43,7 +43,10 @@ class SettingsController extends AsyncNotifier<AppSettings> {
     return repo.load();
   }
 
-  Future<void> update(AppSettings settings) async {
+  /// 注意：方法名不能叫 update —— Riverpod 的 AsyncNotifier 本身就有
+  /// `Future<T> update(FutureOr<T> Function(T) cb, {...})`，同名会被判
+  /// invalid_override。这里改叫 save。
+  Future<void> save(AppSettings settings) async {
     state = AsyncData(settings);
     final repo = await ref.read(settingsRepositoryProvider.future);
     await repo.save(settings);
@@ -52,7 +55,7 @@ class SettingsController extends AsyncNotifier<AppSettings> {
   Future<void> patch(AppSettings Function(AppSettings) fn) async {
     final current = state.valueOrNull;
     if (current == null) return;
-    await update(fn(current));
+    await save(fn(current));
   }
 }
 
