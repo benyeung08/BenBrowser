@@ -18,7 +18,7 @@ class SettingsRepository {
 
     final raw = _store.readString(_key);
     if (raw == null || raw.isEmpty) {
-      final defaults = AppSettings();
+      const defaults = AppSettings();
       _cache = defaults;
       return defaults;
     }
@@ -29,10 +29,10 @@ class SettingsRepository {
       if (decoded is Map) {
         parsed = AppSettings.fromJson(decoded.cast<String, dynamic>());
       } else {
-        parsed = AppSettings();
+        parsed = const AppSettings();
       }
     } catch (_) {
-      parsed = AppSettings();
+      parsed = const AppSettings();
     }
     _cache = parsed;
     return parsed;
