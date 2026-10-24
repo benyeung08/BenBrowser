@@ -18,7 +18,8 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
   @override
   Widget build(BuildContext context) {
     final asyncList = ref.watch(bookmarksProvider);
-    final all = asyncList.valueOrNull ?? const [];
+    // 不要写 const [] —— 推断成 List<Never>，后续元素访问会被判类型错误
+    final all = asyncList.valueOrNull ?? <Bookmark>[];
     final list = _keyword.isEmpty
         ? all
         : all
