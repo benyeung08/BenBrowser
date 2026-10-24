@@ -26,7 +26,8 @@ jobs:
       - name: 安装依赖
         run: flutter pub get
       - name: 静态检查
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        # 只分析 lib 与 test，避免各平台原生壳目录干扰结果
+        run: flutter analyze lib test --no-fatal-infos --no-fatal-warnings
       - name: 单元测试
         run: flutter test
 
@@ -45,8 +46,14 @@ jobs:
           distribution: zulu
           java-version: '17'
 
+      # flutter create 会用模板覆盖 lib/main.dart，并生成引用 MyApp 的
+      # test/widget_test.dart，两者都会让打包结果变成计数器 demo，必须还原
       - name: 生成 Android 壳
-        run: flutter create --org com.nimbus --project-name nimbus_browser --platforms=android .
+        run: |
+          cp lib/main.dart "$RUNNER_TEMP/main.dart.bak"
+          flutter create --org com.ben --project-name ben_browser --platforms=android .
+          cp "$RUNNER_TEMP/main.dart.bak" lib/main.dart
+          rm -f test/widget_test.dart
       - name: 打补丁（http 明文 / 网络权限）
         run: python3 tool/patch_platform.py
       - run: flutter pub get
@@ -61,7 +68,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nimbus-android
+          name: benbrowser-android
           path: build/app/outputs/flutter-apk/*.apk
 
       - name: 发布到 Release
@@ -82,7 +89,12 @@ jobs:
           channel: stable
 
       - name: 生成 Windows 壳
-        run: flutter create --org com.nimbus --project-name nimbus_browser --platforms=windows .
+        shell: bash
+        run: |
+          cp lib/main.dart "$RUNNER_TEMP/main.dart.bak"
+          flutter create --org com.ben --project-name ben_browser --platforms=windows .
+          cp "$RUNNER_TEMP/main.dart.bak" lib/main.dart
+          rm -f test/widget_test.dart
       - run: flutter pub get
 
       - name: 构建 Windows 桌面版
@@ -90,18 +102,18 @@ jobs:
 
       - name: 打包
         shell: pwsh
-        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath Nimbus-windows-x64.zip
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath BenBrowser-windows-x64.zip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nimbus-windows
-          path: Nimbus-windows-x64.zip
+          name: benbrowser-windows
+          path: BenBrowser-windows-x64.zip
 
       - name: 发布到 Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: Nimbus-windows-x64.zip
+          files: BenBrowser-windows-x64.zip
 
   # ---------------------------------------------------------------- macOS
   macos:
@@ -115,7 +127,11 @@ jobs:
           channel: stable
 
       - name: 生成 macOS 壳
-        run: flutter create --org com.nimbus --project-name nimbus_browser --platforms=macos .
+        run: |
+          cp lib/main.dart "$RUNNER_TEMP/main.dart.bak"
+          flutter create --org com.ben --project-name ben_browser --platforms=macos .
+          cp "$RUNNER_TEMP/main.dart.bak" lib/main.dart
+          rm -f test/widget_test.dart
       - name: 打补丁（网络权限 / 产物名）
         run: python3 tool/patch_platform.py
       - run: flutter pub get
@@ -128,15 +144,15 @@ jobs:
           cd build/macos/Build/Products/Release
           APP=$(ls -d *.app | head -1)
           echo "打包产物：$APP"
-          zip -r "$GITHUB_WORKSPACE/Nimbus-macos.zip" "$APP"
+          zip -r "$GITHUB_WORKSPACE/BenBrowser-macos.zip" "$APP"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nimbus-macos
-          path: Nimbus-macos.zip
+          name: benbrowser-macos
+          path: BenBrowser-macos.zip
 
       - name: 发布到 Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: Nimbus-macos.zip
+          files: BenBrowser-macos.zip
