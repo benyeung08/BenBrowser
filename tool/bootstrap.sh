@@ -7,9 +7,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-ORG="${ORG:-com.nimbus}"
+ORG="${ORG:-com.ben}"
 PLATFORMS="${PLATFORMS:-android,windows,macos,linux}"
-PROJECT_NAME="nimbus_browser"
+PROJECT_NAME="ben_browser"
 
 echo "==> 使用 org: $ORG  平台: $PLATFORMS"
 
@@ -25,6 +25,9 @@ flutter create --org "$ORG" --project-name "$PROJECT_NAME" --platforms="$PLATFOR
 if [ -f "$BACKUP/main.dart" ]; then
   cp "$BACKUP/main.dart" lib/main.dart
 fi
+
+# flutter create 生成的模板测试引用 MyApp，与本项目无关，直接删掉
+rm -f test/widget_test.dart
 
 flutter pub get
 python3 tool/patch_platform.py
