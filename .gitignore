@@ -1,20 +1,28 @@
-*.iml
-.gradle
-/local.properties
-/.idea
-.DS_Store
+# ---- Dart / Flutter ----
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
 build/
-/captures
-.externalNativeBuild
-.cxx
-*.apk
-*.aar
-*.ap_
-*.aab
-kcef-bundle/
-cache/
-GPUCache/
-DawnCache/
-desktopApp/build/
-androidApp/build/
-shared/build/
+coverage/
+*.log
+*.dart.bak
+
+# ---- 原生壳：由 tool/bootstrap.sh 生成，不进版本库 ----
+android/
+ios/
+windows/
+macos/
+linux/
+web/
+.metadata
+
+# ---- IDE / 系统 ----
+.idea/
+.vscode/
+*.iml
+*.swp
+.DS_Store
+Thumbs.db
