@@ -124,7 +124,9 @@ class SettingsPage extends ConsumerWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({super.key, required this.title});
+  // 不要加 super.key：这个私有 Widget 在文件内从不传 key，
+  // 会被判 unused_element_parameter（warning）
+  const _SectionTitle({required this.title});
 
   final String title;
 
