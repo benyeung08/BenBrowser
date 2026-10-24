@@ -13,8 +13,10 @@ class AppSettings {
 
   const AppSettings({
     this.homeUrl = AppConstants.defaultHome,
-    this.searchEngineId = SearchEngine.bing.id,
-    this.userAgentModeId = UserAgentPreset.system.id,
+    // const 构造的默认值里不能用 SearchEngine.bing.id（实例字段访问），
+    // 改用 static const 常量，否则报 const_eval_property_access
+    this.searchEngineId = SearchEngine.defaultId,
+    this.userAgentModeId = UserAgentPreset.systemId,
     this.customUserAgent = '',
     this.javaScriptEnabled = true,
     this.incognitoByDefault = false,
@@ -28,7 +30,7 @@ class AppSettings {
 
   /// 实际下发给 WebView 的 UA，null 表示跟随系统
   String? get effectiveUserAgent {
-    if (userAgentModeId == 'custom') {
+    if (userAgentModeId == UserAgentPreset.customId) {
       return customUserAgent.trim().isEmpty ? null : customUserAgent.trim();
     }
     return userAgentPreset.value;
@@ -68,9 +70,10 @@ class AppSettings {
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
         homeUrl: json['homeUrl'] as String? ?? AppConstants.defaultHome,
-        searchEngineId: json['searchEngineId'] as String? ?? SearchEngine.bing.id,
+        searchEngineId:
+            json['searchEngineId'] as String? ?? SearchEngine.defaultId,
         userAgentModeId:
-            json['userAgentModeId'] as String? ?? UserAgentPreset.system.id,
+            json['userAgentModeId'] as String? ?? UserAgentPreset.systemId,
         customUserAgent: json['customUserAgent'] as String? ?? '',
         javaScriptEnabled: json['javaScriptEnabled'] as bool? ?? true,
         incognitoByDefault: json['incognitoByDefault'] as bool? ?? false,
