@@ -17,7 +17,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final all = ref.watch(historyProvider).valueOrNull ?? const [];
+    final all = ref.watch(historyProvider).valueOrNull ?? <HistoryEntry>[];
     final list = _keyword.isEmpty
         ? all
         : all
