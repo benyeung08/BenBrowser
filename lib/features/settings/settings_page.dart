@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants.dart';
 import '../../data/models/app_settings.dart';
+import '../../data/models/release_info.dart';
+import '../../services/update_service.dart';
 import '../../state/providers.dart';
 import '../browser/navigation.dart';
+import 'update_dialog.dart';
 
 /// 设置页
 class SettingsPage extends ConsumerWidget {
@@ -109,6 +112,24 @@ class SettingsPage extends ConsumerWidget {
                 }
               },
             ),
+            const _SectionTitle(title: '更新'),
+            _UpdateTile(),
+            _TextTile(
+              label: 'GitHub 仓库',
+              value: settings.repoSlug,
+              hint: 'owner/repo，用于检查更新',
+              onSubmitted: (v) => ref
+                  .read(settingsProvider.notifier)
+                  .patch((s) => s.copyWith(repoSlug: v.trim())),
+            ),
+            SwitchListTile(
+              title: const Text('启动时自动检查更新'),
+              subtitle: const Text('有新版时弹窗提示，不会自动下载'),
+              value: settings.checkUpdateOnLaunch,
+              onChanged: (v) => ref
+                  .read(settingsProvider.notifier)
+                  .patch((s) => s.copyWith(checkUpdateOnLaunch: v)),
+            ),
             const SizedBox(height: 16),
             Center(
               child: Text(
@@ -119,6 +140,89 @@ class SettingsPage extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 「检查更新」入口：显示当前版本，点击后查询 GitHub 最新 Release
+class _UpdateTile extends ConsumerStatefulWidget {
+  const _UpdateTile();
+
+  @override
+  ConsumerState<_UpdateTile> createState() => _UpdateTileState();
+}
+
+class _UpdateTileState extends ConsumerState<_UpdateTile> {
+  bool _checking = false;
+  String _version = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final v = await ref.read(updateServiceProvider).currentVersion();
+    if (!mounted) return;
+    setState(() => _version = v);
+  }
+
+  Future<void> _check() async {
+    if (_checking) return;
+    setState(() => _checking = true);
+
+    final settings = ref.read(settingsProvider).valueOrNull;
+    final outcome = await ref.read(updateServiceProvider).check(
+          settings?.repoSlug ?? AppConstants.defaultRepoSlug,
+        );
+
+    if (!mounted) return;
+    setState(() => _checking = false);
+
+    final release = outcome.release;
+    if (outcome.hasUpdate && release != null) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => UpdateDialog(
+          release: release,
+          currentVersion: outcome.currentVersion,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(_message(outcome))),
+    );
+  }
+
+  String _message(UpdateCheckOutcome outcome) => switch (outcome.result) {
+        UpdateCheckResult.upToDate =>
+          '已是最新版本（${outcome.currentVersion}）',
+        UpdateCheckResult.noRelease =>
+          outcome.message ?? '该仓库还没有发布 Release',
+        UpdateCheckResult.failed => outcome.message ?? '检查更新失败，请检查网络',
+        UpdateCheckResult.available => '发现新版本',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final versionText = _version.isEmpty ? '读取中…' : 'v$_version';
+    return ListTile(
+      leading: _checking
+          ? const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.system_update_alt),
+      title: const Text('检查更新'),
+      subtitle: Text('当前版本 $versionText'),
+      trailing: _checking ? null : const Icon(Icons.chevron_right),
+      enabled: !_checking,
+      onTap: _check,
     );
   }
 }
