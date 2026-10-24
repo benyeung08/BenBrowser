@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../core/url_utils.dart';
 import '../../data/models/browser_tab.dart';
+import '../../data/models/history_entry.dart';
 import '../../state/providers.dart';
 import '../browser/navigation.dart';
 
@@ -30,7 +31,8 @@ class _NewTabPageState extends ConsumerState<NewTabPage> {
   Widget build(BuildContext context) {
     final engine = ref.watch(settingsProvider).valueOrNull?.searchEngine ??
         SearchEngine.bing;
-    final history = ref.watch(historyProvider).valueOrNull ?? const [];
+    final history =
+        ref.watch(historyProvider).valueOrNull ?? <HistoryEntry>[];
     final recent = history.take(8).toList();
 
     return Center(
