@@ -10,9 +10,8 @@ import '../data/repositories/settings_repository.dart';
 import '../data/storage/prefs_store.dart';
 
 /// 持久化存储单例
-final prefsStoreProvider = FutureProvider<PrefsStore>((ref) async {
-  return PrefsStore.open();
-});
+final prefsStoreProvider =
+    FutureProvider<PrefsStore>((ref) => PrefsStore.open());
 
 final settingsRepositoryProvider =
     FutureProvider<SettingsRepository>((ref) async {
