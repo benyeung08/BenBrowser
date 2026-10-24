@@ -1,87 +1,116 @@
-# BrowserApp — 跨平台 Chromium 浏览器
+# Nimbus Browser
 
-基于 **Kotlin Multiplatform + Compose Multiplatform** 构建，一个代码库覆盖：
+基于 **Flutter + 系统原生 WebView** 的个人自研浏览器：一份 Dart 代码，同时跑在 **Android / Windows / macOS** 上，靠 GitHub Actions 自动出三端安装包。
 
-| 平台 | 渲染内核 | 产物 |
-|------|----------|------|
-| Android | 系统 Chromium WebView | APK |
-| Windows 11 | KCEF (Chromium Embedded Framework) | `.msi` / `.exe` |
-| macOS 15+ (macOS 26 兼容) | KCEF (Chromium Embedded Framework) | `.dmg` |
+| 平台 | 内核 | 说明 |
+| --- | --- | --- |
+| Android | 系统 WebView（Chromium） | 由厂商/Google Play 更新，无需自带内核 |
+| Windows | WebView2（Edge Chromium） | 需 Windows 10 1809+，Win10 需装 WebView2 Runtime |
+| macOS | WKWebView | 需 macOS 10.14+ |
 
-## 特性
+## 已实现功能
 
-- 统一地址栏 / 前进后退 / 刷新 / 主页
-- 书签管理（跨平台共用数据结构）
-- 桌面模式（切换 User-Agent）
-- 进度条
-- **支持 Google 账号登录**（Android 端已配置第三方 Cookie 与 DOM storage）
-- Deep Link：外部链接可直接唤起 Android App
+- 多标签（新建 / 关闭 / 切换，上限 20 个）
+- 地址栏：裸域名自动补 `https://`，普通关键词走搜索引擎
+- 前进 / 后退 / 刷新 / 停止 / 主页，加载进度条
+- 书签（收藏、搜索、删除、清空）
+- 历史记录（按站点去重、关键词搜索，无痕标签不入库）
+- 下载管理（Dio 直连，进度条 + 打开文件，三端行为一致）
+- 无痕标签（独立 incognito 上下文，不写缓存与历史）
+- User-Agent 切换（跟随系统 / 桌面 Chrome / 移动 Chrome / 自定义）
+- 新标签页：搜索框 + 常用站点 + 最近访问
+- 设置持久化、亮/暗/跟随系统主题
+- `target=_blank` 链接自动在新标签打开
 
-## 项目结构
+## 目录结构
 
 ```
-BrowserApp/
-├── shared/                    # 共享代码（UI + 状态 + expect/actual WebView 接口）
-│   ├── commonMain/            # Compose UI、ViewModel、Bookmark 模型
-│   ├── androidMain/           # Android WebView 实现
-│   └── desktopMain/           # KCEF/Chromium 实现
-├── androidApp/                # Android 入口与 Manifest
-└── desktopApp/                # 桌面端入口与打包配置
+lib/
+├── main.dart                      入口
+├── app.dart                       MaterialApp（主题随设置切换）
+├── core/                          常量、主题、平台判断、URL 解析
+├── data/
+│   ├── models/                    Tab / 书签 / 历史 / 下载 / 设置
+│   ├── repositories/              持久化读写
+│   └── storage/prefs_store.dart   SharedPreferences JSON 存储
+├── state/                         Riverpod：设置、标签、下载、仓库
+└── features/
+    ├── browser/                   标签条、工具栏、WebView、导航动作
+    ├── new_tab/                   新标签页
+    ├── bookmarks｜history｜downloads｜settings
+tool/
+├── bootstrap.sh / .ps1            生成各平台原生壳
+└── patch_platform.py              Android 明文流量 + macOS 网络权限
+.github/workflows/build.yml        analyze/test + 三端构建 + Release
 ```
+
+**为什么仓库里没有 android/、windows/、macos/ 目录？**
+原生壳由 Flutter SDK 版本决定，硬编码进仓库会随 SDK 升级产生大量冲突。因此统一由 `tool/bootstrap.sh` 或 CI 里的 `flutter create` 生成，代码库只维护 Dart 侧。需要自定义 Android 签名或 macOS 公证时，把对应目录从 `.gitignore` 里放出来提交即可。
 
 ## 快速开始
 
-### 前置要求
-
-- **JDK 17**（推荐 JetBrains Runtime / JBR，KCEF 需要 JCEF 支持）
-- Android Studio 2024.2+
-- Xcode 16+（仅 macOS 打包需要）
-
-### 运行 Android
-
 ```bash
-./gradlew :androidApp:installDebug
+# 1. 生成本机原生壳（可只生成部分平台）
+PLATFORMS=android,windows,macos ./tool/bootstrap.sh
+
+# 2. 运行
+flutter run -d windows          # Windows
+flutter run -d macos            # macOS
+flutter run -d <device-id>      # Android（flutter devices 查看）
 ```
 
-### 运行桌面端（Windows / macOS）
+Windows 用户在 PowerShell 里执行 `.\tool\bootstrap.ps1`。
+
+改动包名 / 组织名：
 
 ```bash
-./gradlew :desktopApp:run
+ORG=com.yourname ./tool/bootstrap.sh
 ```
 
-首次运行会下载 Chromium 运行时（约数百 MB），请保持网络畅通。
-
-### 打包安装包
+## 推送到你自己的 GitHub
 
 ```bash
-# Windows
-./gradlew :desktopApp:packageMsi
-# 产物: desktopApp/build/compose/binaries/main/msi/*.msi
-
-# macOS
-./gradlew :desktopApp:packageDmg
-# 产物: desktopApp/build/compose/binaries/main/dmg/*.dmg
+git init && git add . && git commit -m "feat: init nimbus browser"
+git remote add origin git@github.com:<你的账号>/nimbus_browser.git
+git push -u origin main
 ```
 
-## Google 账号登录说明
+- 推 `main` / 提 PR → 跑 analyze + test
+- 打 tag `git tag v0.1.0 && git push --tags` → 自动构建并在 Release 挂上：
+  `nimbus-android（3 个 ABI 的 APK）`、`Nimbus-windows-x64.zip`、`Nimbus-macos.zip`
 
-Android 端已启用以下关键配置：
+## 架构要点
 
-- `domStorageEnabled = true`
-- `databaseEnabled = true`
-- `setSupportMultipleWindows(true)`
-- 允许 `accounts.google.com` 的第三方 Cookie
-- `MIXED_CONTENT_ALWAYS_ALLOW`
-- Chrome User-Agent
+- **状态管理**：Riverpod。设置用 `AsyncNotifier` 异步加载；标签用 `Notifier<TabsState>`
+- **控制器托管**：`InAppWebViewController` 不进状态类，统一放 `webViewRegistryProvider`（`tabId → controller`），避免状态对象持有原生句柄
+- **标签渲染**：`IndexedStack` 保持所有标签存活，关闭时从 registry 摘除 controller
+- **存储**：`SharedPreferences` + JSON，三端零权限；数据量大了可平滑换成 Isar / Drift，只需替换 repository 实现
+- **下载**：不走各平台自带下载器，统一 Dio 落到应用数据目录下的 `Nimbus/Downloads`，Android 13+ 无需存储权限
 
-## 关于 KCEF
+## 平台注意事项
 
-桌面端使用 [KCEF](https://github.com/DATL4G/KCEF) 封装的 Chromium 内核。它提供：
+- **Windows**：Win10 未预装 WebView2 时首次启动会报错，安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) 即可；Win11 自带
+- **macOS**：Release 包默认 ad-hoc 签名，别人电脑上会被 Gatekeeper 拦。分发前用 Developer ID 签名 + 公证
+- **Android**：http 明文站点已通过补丁脚本开启；`minSdkVersion` 若低于 21 需自行上调
+- **网络权限**：Android INTERNET 权限与 macOS `network.client` entitlement 已由 `tool/patch_platform.py` 注入
 
-- 完整的 Chromium 渲染能力，与网页标准兼容性好
-- 首启动需下载 Chromium 运行时
-- 内存占用高于原生 WebView，发布时请关注打包体积
+## 后续可加（按性价比排序）
 
-## License
+1. 广告拦截：拦截规则订阅 + `shouldOverrideUrlLoading` 过滤（本机规则文件，无需服务器）
+2. 标签会话持久化（当前关闭即丢失，重启后只恢复主页）
+3. 书签/历史导入导出（HTML / JSON）
+4. 密码与表单填充（需加密存储，建议 `flutter_secure_storage`）
+5. 侧边栏、阅读模式、网页截图分享
+6. 插件脚本注入（`evaluateJavascript` + 用户脚本管理）
 
-Apache-2.0
+## 依赖版本适配提示
+
+`flutter_inappwebview` 6.x 与 5.x 的 API 名称有差异，本项目按 **6.x** 编写：
+
+| 用途 | 6.x（本项目） | 5.x |
+| --- | --- | --- |
+| WebView 配置 | `InAppWebViewSettings` | `InAppWebViewGroupOptions` |
+| URL 类型 | `WebUri(url)` | `Uri` |
+| 下载回调 | `onDownloadStartRequest` | `onDownloadStart` |
+
+若你锁到 5.x，只需按上表替换 `lib/features/browser/web_view_surface.dart` 里的对应写法。

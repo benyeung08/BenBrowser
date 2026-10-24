@@ -1,0 +1,44 @@
+name: nimbus_browser
+description: >-
+  基于 Flutter + 系统原生 WebView 的轻量自研浏览器，一套代码覆盖
+  Android / Windows / macOS。
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: '>=3.22.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 状态管理
+  flutter_riverpod: ^2.6.1
+
+  # WebView 内核（Android: 系统 WebView / Windows: WebView2 / macOS: WKWebView）
+  flutter_inappwebview: ^6.1.0
+
+  # 本地存储（设置 / 书签 / 历史，桌面端与移动端均有实现）
+  shared_preferences: ^2.3.3
+  path_provider: ^2.1.4
+
+  # 下载
+  dio: ^5.7.0
+  open_filex: ^4.5.0
+
+  # 外链跳转
+  url_launcher: ^6.3.1
+
+  # 路径处理
+  path: ^1.9.0
+
+  collection: ^1.18.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

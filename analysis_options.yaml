@@ -1,0 +1,18 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # 开发期允许少量 TODO 占位
+    todo: ignore
+  exclude:
+    - build/**
+    - windows/**
+    - macos/**
+    - android/**
+
+linter:
+  rules:
+    prefer_const_constructors: true
+    prefer_final_fields: true
+    avoid_print: true
+    use_super_parameters: true
