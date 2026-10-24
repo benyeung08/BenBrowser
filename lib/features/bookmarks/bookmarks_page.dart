@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/url_utils.dart';
+// ★ Bookmark 类型本体，缺它会导致 non_type_as_type_argument
+import '../../data/models/bookmark.dart';
 import '../../state/providers.dart';
 
 /// 书签列表
