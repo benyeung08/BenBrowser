@@ -22,7 +22,7 @@ class SettingsPage extends ConsumerWidget {
         data: (settings) => ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
-            _SectionTitle(title: '常规'),
+            const _SectionTitle(title: '常规'),
             _TextTile(
               label: '主页',
               value: settings.homeUrl,
@@ -124,7 +124,7 @@ class SettingsPage extends ConsumerWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title});
+  const _SectionTitle({super.key, required this.title});
 
   final String title;
 
