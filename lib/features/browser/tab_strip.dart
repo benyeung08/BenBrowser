@@ -24,7 +24,7 @@ class TabStrip extends ConsumerWidget {
               itemCount: state.tabs.length,
               itemBuilder: (context, index) {
                 final tab = state.tabs[index];
-                final active = index == state.activeIndex;
+                final active = index == state.safeIndex;
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3),
                   child: Material(

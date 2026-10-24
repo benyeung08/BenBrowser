@@ -21,7 +21,6 @@ class WebViewSurface extends ConsumerStatefulWidget {
 }
 
 class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
-  InAppWebViewController? _controller;
   late final WebViewRegistry _registry;
 
   BrowserTab get tab => widget.tab;
@@ -50,8 +49,7 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
         cacheEnabled: !tab.incognito,
       ),
       onWebViewCreated: (controller) {
-        _controller = controller;
-        ref.read(webViewRegistryProvider).register(tab.id, controller);
+        _registry.register(tab.id, controller);
       },
       onLoadStart: (controller, url) {
         _update(url: url?.toString(), isLoading: true, progress: 0);
@@ -71,8 +69,9 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
         _update(url: url?.toString());
         await _syncNavState(controller);
       },
-      // 下载：交给统一的下载管理器（Dio），避免各平台下载器行为不一致
-      onDownloadStartRequest: (controller, request) {
+      // 下载：交给统一的下载管理器（Dio），避免各平台下载器行为不一致。
+      // 返回 null 表示不拦截内核自带的下载流程（6.x 的 DownloadStartResponse）
+      onDownloadStartRequest: (controller, request) async {
         final url = request.url.toString();
         ref.read(downloadsProvider.notifier).start(url);
         if (context.mounted) {
@@ -80,6 +79,7 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
             const SnackBar(content: Text('已开始下载，可在菜单 → 下载中查看')),
           );
         }
+        return null;
       },
       // target=_blank 的链接改为在新标签打开
       onCreateWindow: (controller, action) async {
