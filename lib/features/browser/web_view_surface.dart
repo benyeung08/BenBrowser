@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +13,11 @@ import '../../state/tabs_controller.dart';
 /// 单个标签页的 WebView 载体。
 /// Android → 系统 WebView；Windows → WebView2；macOS → WKWebView。
 /// 三端共用同一份 Dart 代码，仅由插件在内部切换内核。
+///
+/// 注意：所有回调一律写成**同步函数**，严格贴合插件声明的 void / FutureOr 签名。
+/// 用 async 闭包会因返回类型推断产生 body_might_complete_normally、
+/// avoid_returning_null_for_void、invalid_override 等一系列问题，
+/// 需要异步的工作改用 unawaited 显式「发射后不管」。
 class WebViewSurface extends ConsumerStatefulWidget {
   const WebViewSurface({super.key, required this.tab});
 
@@ -56,10 +63,10 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
       onLoadStart: (controller, url) {
         _update(url: url?.toString(), isLoading: true, progress: 0);
       },
-      onLoadStop: (controller, url) async {
+      onLoadStop: (controller, url) {
         _update(url: url?.toString(), isLoading: false, progress: 100);
-        await _syncNavState(controller);
-        await _recordHistory(url?.toString());
+        unawaited(_syncNavState(controller));
+        unawaited(_recordHistory(url?.toString()));
       },
       onProgressChanged: (controller, progress) {
         _update(progress: progress, isLoading: progress < 100);
@@ -67,34 +74,35 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
       onTitleChanged: (controller, title) {
         _update(title: title);
       },
-      onUpdateVisitedHistory: (controller, url, isReload) async {
+      onUpdateVisitedHistory: (controller, url, isReload) {
         _update(url: url?.toString());
-        await _syncNavState(controller);
+        unawaited(_syncNavState(controller));
       },
-      // 下载：交给统一的下载管理器（Dio），避免各平台下载器行为不一致。
-      // 写成 async 是为了同时兼容插件的 void 与 FutureOr<...> 两种回调签名；
-      // 不要写 return null —— 那会触发 avoid_returning_null_for_void。
-      onDownloadStartRequest: (controller, request) async {
-        final url = request.url.toString();
-        ref.read(downloadsProvider.notifier).start(url);
+      // 下载：交给统一的下载管理器（Dio），避免各平台下载器行为不一致
+      onDownloadStartRequest: (controller, request) {
+        unawaited(_startDownload(request.url.toString()));
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('已开始下载，可在菜单 → 下载中查看')),
           );
         }
       },
-      // target=_blank 的链接改为在新标签打开
-      onCreateWindow: (controller, action) async {
+      // target=_blank 的链接改为在新标签打开（同步返回 bool，兼容 FutureOr<bool?>）
+      onCreateWindow: (controller, action) {
         final url = action.request.url?.toString();
         if (url != null && url.isNotEmpty) {
-          ref
-              .read(tabsProvider.notifier)
-              .openTab(url: url, incognito: tab.incognito);
+          ref.read(tabsProvider.notifier).openTab(
+                url: url,
+                incognito: tab.incognito,
+              );
         }
         return true;
       },
     );
   }
+
+  Future<void> _startDownload(String url) =>
+      ref.read(downloadsProvider.notifier).start(url);
 
   void _update({
     String? url,
