@@ -75,7 +75,8 @@ Future<void> clearBrowsingData(WidgetRef ref) async {
     final c = registry.get(t.id);
     if (c == null) continue;
     try {
-      await c.clearCache();
+      // 6.x 里 clearCache 已废弃，官方建议用 clearAllCache
+      await c.clearAllCache();
     } catch (_) {
       // Windows 内核未实现时忽略，仅清理本地数据
     }

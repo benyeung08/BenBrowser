@@ -87,8 +87,10 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
           );
         }
       },
-      // target=_blank 的链接改为在新标签打开（同步返回 bool，兼容 FutureOr<bool?>）
-      onCreateWindow: (controller, action) {
+      // target=_blank 的链接改为在新标签打开。
+      // 该回调的上下文类型是 Future<bool?>，所以必须写成 async：
+      // 同步返回 bool 会报 return_of_invalid_type_from_closure
+      onCreateWindow: (controller, action) async {
         final url = action.request.url?.toString();
         if (url != null && url.isNotEmpty) {
           ref.read(tabsProvider.notifier).openTab(
