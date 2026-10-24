@@ -7,8 +7,8 @@ import 'data/models/app_settings.dart';
 import 'features/browser/browser_page.dart';
 import 'state/providers.dart';
 
-class NimbusApp extends ConsumerWidget {
-  const NimbusApp({super.key});
+class BenBrowserApp extends ConsumerWidget {
+  const BenBrowserApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
