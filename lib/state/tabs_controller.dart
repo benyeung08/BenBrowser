@@ -10,7 +10,7 @@ class TabsState {
   final List<BrowserTab> tabs;
   final int activeIndex;
 
-  const TabsState({this.tabs = const [], this.activeIndex = 0});
+  const TabsState({this.tabs = const <BrowserTab>[], this.activeIndex = 0});
 
   bool get isEmpty => tabs.isEmpty;
 
