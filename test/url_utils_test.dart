@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nimbus_browser/core/constants.dart';
-import 'package:nimbus_browser/core/url_utils.dart';
+import 'package:ben_browser/core/constants.dart';
+import 'package:ben_browser/core/url_utils.dart';
 
 void main() {
   group('UrlUtils.resolve', () {
