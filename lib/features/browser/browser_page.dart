@@ -129,10 +129,13 @@ class _BottomBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tabs = ref.watch(tabsProvider);
+    // Theme.dividerColor 已废弃（deprecated_member_use），改用 dividerTheme
+    final dividerColor = Theme.of(context).dividerTheme.color ??
+        Theme.of(context).colorScheme.outlineVariant;
     return Container(
       decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor),
+          top: BorderSide(color: dividerColor),
         ),
       ),
       child: Row(
