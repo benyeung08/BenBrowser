@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'Nimbus';
+  static const String appName = 'BenBrowser';
   static const String defaultHome = 'https://www.bing.com';
   static const String newTabUrl = 'about:blank';
 
@@ -45,6 +45,11 @@ class SearchEngine {
 
   static const List<SearchEngine> all = [bing, google, duckduckgo, baidu];
 
+  /// 默认引擎的 id。
+  /// 注意：const 表达式里不能访问实例字段（SearchEngine.bing.id 会报
+  /// const_eval_property_access），所以另开一个 static const 供默认值使用。
+  static const String defaultId = 'bing';
+
   static SearchEngine fromId(String id) => all.firstWhere(
         (e) => e.id == id,
         orElse: () => bing,
@@ -74,6 +79,10 @@ class UserAgentPreset {
   );
 
   static const List<UserAgentPreset> all = [system, desktop, mobile];
+
+  /// 同上：const 上下文里用这个代替 UserAgentPreset.system.id
+  static const String systemId = 'system';
+  static const String customId = 'custom';
 
   static UserAgentPreset fromId(String id) => all.firstWhere(
         (e) => e.id == id,
