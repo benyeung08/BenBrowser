@@ -11,6 +11,10 @@ class AppSettings {
   final bool restoreTabsOnLaunch;
   final ThemeModeSetting themeMode;
 
+  /// 检查更新用的 GitHub 仓库，格式 owner/repo
+  final String repoSlug;
+  final bool checkUpdateOnLaunch;
+
   const AppSettings({
     this.homeUrl = AppConstants.defaultHome,
     // const 构造的默认值里不能用 SearchEngine.bing.id（实例字段访问），
@@ -22,6 +26,8 @@ class AppSettings {
     this.incognitoByDefault = false,
     this.restoreTabsOnLaunch = true,
     this.themeMode = ThemeModeSetting.system,
+    this.repoSlug = AppConstants.defaultRepoSlug,
+    this.checkUpdateOnLaunch = true,
   });
 
   SearchEngine get searchEngine => SearchEngine.fromId(searchEngineId);
@@ -45,6 +51,8 @@ class AppSettings {
     bool? incognitoByDefault,
     bool? restoreTabsOnLaunch,
     ThemeModeSetting? themeMode,
+    String? repoSlug,
+    bool? checkUpdateOnLaunch,
   }) =>
       AppSettings(
         homeUrl: homeUrl ?? this.homeUrl,
@@ -55,6 +63,8 @@ class AppSettings {
         incognitoByDefault: incognitoByDefault ?? this.incognitoByDefault,
         restoreTabsOnLaunch: restoreTabsOnLaunch ?? this.restoreTabsOnLaunch,
         themeMode: themeMode ?? this.themeMode,
+        repoSlug: repoSlug ?? this.repoSlug,
+        checkUpdateOnLaunch: checkUpdateOnLaunch ?? this.checkUpdateOnLaunch,
       );
 
   Map<String, dynamic> toJson() => {
@@ -66,6 +76,8 @@ class AppSettings {
         'incognitoByDefault': incognitoByDefault,
         'restoreTabsOnLaunch': restoreTabsOnLaunch,
         'themeMode': themeMode.name,
+        'repoSlug': repoSlug,
+        'checkUpdateOnLaunch': checkUpdateOnLaunch,
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -82,6 +94,8 @@ class AppSettings {
           (e) => e.name == json['themeMode'],
           orElse: () => ThemeModeSetting.system,
         ),
+        repoSlug: json['repoSlug'] as String? ?? AppConstants.defaultRepoSlug,
+        checkUpdateOnLaunch: json['checkUpdateOnLaunch'] as bool? ?? true,
       );
 }
 
