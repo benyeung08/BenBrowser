@@ -1,7 +1,6 @@
 name: ben_browser
 description: >-
-  基于 Flutter + 系统原生 WebView 的轻量自研浏览器，一套代码覆盖
-  Android / Windows / macOS。
+  基于 Flutter + 系统 WebView 的轻量自研浏览器，面向 Android。
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -29,6 +28,12 @@ dependencies:
 
   # 外链跳转
   url_launcher: ^6.3.1
+
+  # 版本信息（设置页展示版本号 / 检查更新时比对）
+  package_info_plus: ^8.1.0
+
+  # 解压更新包（桌面端下载 zip 后在应用内展开）
+  archive: ^3.6.1
 
   # 路径处理
   path: ^1.9.0

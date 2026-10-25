@@ -1,13 +1,18 @@
 # BenBrowser
 
-基于 **Flutter + 系统原生 WebView** 的个人自研浏览器：一份 Dart 代码，同时跑在 **Android / Windows / macOS** 上，靠 GitHub Actions 自动出三端安装包。
-*A personal browser built on **Flutter + each platform's native WebView**: one Dart codebase running on **Android / Windows / macOS**, with GitHub Actions building all three automatically.*
+基于 **Flutter + Android 系统 WebView** 的个人自研浏览器：轻量、无自带内核，靠 GitHub Actions 自动出安装包。
+*A personal browser built on **Flutter + Android's system WebView**: lightweight, no bundled engine, built automatically by GitHub Actions.*
 
-| 平台 Platform | 内核 Engine | 说明 Notes |
-| --- | --- | --- |
-| Android | 系统 WebView（Chromium） | 由厂商 / Google Play 更新，无需自带内核 · Updated by OEM / Play Store, no bundled engine |
-| Windows | WebView2（Edge Chromium） | 需 Windows 10 1809+，Win10 需装 WebView2 Runtime · Windows 10 1809+; Win10 needs WebView2 Runtime |
-| macOS | WKWebView | 需 macOS 10.14+ · macOS 10.14+ |
+> 本项目已精简为**纯 Android**。早期版本支持的 Windows / macOS 已移除——
+> 桌面端静默更新依赖 Sparkle / WinSparkle，macOS 上还需要付费的 Apple Developer
+> 账号（$99/年）做签名公证，维护成本远高于收益。
+> *This project is now **Android-only**. Windows / macOS support has been removed — silent desktop updates depend on Sparkle / WinSparkle, and on macOS a paid Apple Developer account ($99/year) is required for signing and notarization. The maintenance cost outweighed the benefit.*
+
+| 项目 Item | 值 Value |
+| --- | --- |
+| 内核 Engine | Android 系统 WebView（Chromium），由厂商 / Google Play 更新 · *Android System WebView (Chromium), updated by the OEM / Play Store* |
+| 最低版本 Min SDK | 21（Android 5.0） |
+| 安装方式 Install | `app-<abi>-release.apk`，按 CPU 架构拆分 · *split per ABI* |
 
 ---
 
@@ -18,36 +23,34 @@
 - **导航** 前进 / 后退 / 刷新 / 停止 / 主页，带加载进度条 — *Back / forward / reload / stop / home, with a progress bar*
 - **书签** 收藏、搜索、删除、清空 — *Bookmarks: add, search, delete, clear*
 - **历史记录** 按站点去重、关键词搜索（无痕标签不入库）— *History: deduplicated per site, keyword search (incognito is never recorded)*
-- **下载管理** Dio 直连，进度条 + 打开文件，三端行为一致 — *Downloads: direct via Dio, progress bar + open file, consistent across platforms*
+- **下载管理** Dio 直连，进度条 + 打开文件 — *Downloads: direct via Dio, progress bar + open file*
 - **无痕标签** 独立 incognito 上下文，不写缓存与历史 — *Incognito tabs: separate context, no cache and no history*
 - **User-Agent 切换** 跟随系统 / 桌面 Chrome / 移动 Chrome / 自定义 — *UA switching: system / desktop Chrome / mobile Chrome / custom*
 - **新标签页** 搜索框 + 常用站点 + 最近访问 — *New tab page: search box + favorite sites + recent visits*
 - **主题与设置** 持久化、亮 / 暗 / 跟随系统 — *Persistent settings, light / dark / system theme*
 - **`target=_blank`** 自动在新标签打开 — *`target=_blank` links open in a new tab*
-- **应用内更新** 读 GitHub Releases，含 changelog；Android 可下载后直接安装 — *In-app updates: reads GitHub Releases with changelog; on Android it downloads and hands off to the installer*
+- **应用内更新** 读 GitHub Releases，含 changelog；下载后可直接在应用内安装 — *In-app updates: reads GitHub Releases with changelog; installs from within the app after download*
 
 ---
 
 ## 应用内更新 / In-App Updates
 
-基于 **GitHub Releases**：打 tag 后 CI 自动生成 Release 与安装包，应用端查询 `releases/latest` 拿到版本号与附件。
-*Built on **GitHub Releases**: pushing a tag makes CI create the Release and installers; the app queries `releases/latest` for the version and assets.*
+基于 **GitHub Releases**：打 tag 后 CI 自动生成 Release 与 APK，应用端查询 `releases/latest` 拿到版本号与附件。
+*Built on **GitHub Releases**: pushing a tag makes CI create the Release and the APKs; the app queries `releases/latest` for the version and assets.*
 
-**首次启用 / First-time setup**：设置 → 更新 → 把「GitHub 仓库」从默认的 `OWNER/ben_browser` 改成你自己的 `用户名/仓库名`（如 `zhangsan/ben_browser`）。留着 `OWNER` 会被识别为未配置，不会发起请求。
+**首次启用 / First-time setup**：设置 → 更新 → 把「GitHub 仓库」从默认的 `OWNER/ben_browser` 改成你自己的 `用户名/仓库名`。留着 `OWNER` 会被识别为未配置，不会发起请求。
 *Settings → Update → change "GitHub repository" from the default `OWNER/ben_browser` to your own `username/ben_browser`. Leaving `OWNER` in place is treated as "not configured" and no request is made.*
 
-| 平台 Platform | 行为 Behavior |
-| --- | --- |
-| Android | 下载对应 ABI 的 APK → 唤起系统安装器（需授权「安装未知应用」）· *Downloads the matching-ABI APK → opens the system installer (user must allow "install unknown apps")* |
-| Windows / macOS | 桌面端没有统一的静默安装途径，跳浏览器打开下载页，手动替换 · *No unified silent-install path on desktop; opens the download page in a browser for manual replacement* |
+**更新流程 / Update flow**：设置 → 更新 → 检查更新 → 发现新版本 → 「后台下载」→ 在「下载」页看进度 → 完成后点「安装」。
+*Settings → Update → Check for updates → new version found → "Download in background" → track progress in Downloads → tap "Install" when finished.*
 
-触发方式两种 / *Two triggers*：启动时延迟 3 秒静默检查（可在设置里关掉，有新版才弹窗），以及设置页「检查更新」手动点。
-*A silent check 3 seconds after launch (can be disabled in settings; a dialog only appears if a newer version exists), plus a manual "Check for updates" button in Settings.*
+更新包走**浏览器自带下载器**（`DownloadKind.update`），在下载列表里带版本号徽章，只有下载完成的更新包才显示「安装」按钮。安装时需用户授权「允许安装未知应用」，这是 Android 的硬性要求。
+*Update packages go through the **browser's own downloader** (`DownloadKind.update`), show a version badge in the list, and only expose an "Install" button once finished. Installing requires the user to allow "install unknown apps" — a hard Android requirement.*
 
 版本比较用 `compareVersion()`（`lib/services/update_service.dart`）：容忍 `v` 前缀、`+build` 后缀与位数不齐（`1.2` 与 `1.2.0` 视为相等），有对应的单元测试 `test/version_test.dart`。
 *Version comparison uses `compareVersion()` (`lib/services/update_service.dart`): tolerant of the `v` prefix, `+build` suffix and uneven segment counts (`1.2` equals `1.2.0`). Covered by `test/version_test.dart`.*
 
-**Android 原生配置 / Android native setup**：装 APK 需要 `REQUEST_INSTALL_PACKAGES` 权限 + FileProvider（Android 7.0+ 禁止 `file://` URI）。这两项以及 `res/xml/file_paths.xml` 都由 `tool/patch_platform.py` 自动注入，跑 `flutter create` 后记得执行它。
+**原生配置 / Native setup**：装 APK 需要 `REQUEST_INSTALL_PACKAGES` 权限 + FileProvider（Android 7.0+ 禁止 `file://` URI）。这两项以及 `res/xml/file_paths.xml` 都由 `tool/patch_platform.py` 自动注入，跑 `flutter create` 后记得执行它。
 *Installing an APK needs the `REQUEST_INSTALL_PACKAGES` permission plus a FileProvider (Android 7.0+ rejects `file://` URIs). Both, together with `res/xml/file_paths.xml`, are injected by `tool/patch_platform.py` — remember to run it after `flutter create`.*
 
 ---
@@ -58,7 +61,7 @@
 lib/
 ├── main.dart                      入口 / entry point
 ├── app.dart                       MaterialApp（主题随设置切换）/ MaterialApp (theme follows settings)
-├── core/                          常量、主题、平台判断、URL 解析 / constants, theme, platform, URL parsing
+├── core/                          常量、主题、URL 解析 / constants, theme, URL parsing
 ├── data/
 │   ├── models/                    Tab / 书签 / 历史 / 下载 / 设置 / tab, bookmark, history, download, settings
 │   ├── repositories/              持久化读写 / persistence
@@ -70,30 +73,28 @@ lib/
     ├── bookmarks｜history｜downloads｜settings
 tool/
 ├── bootstrap.sh / .ps1            生成各平台原生壳 / generate platform shells
-└── patch_platform.py              Android 明文流量 + macOS 网络权限 / cleartext + macOS entitlements
+└── patch_platform.py              Android 明文流量 + 安装权限 + FileProvider / cleartext, install permission, FileProvider
 .github/workflows/build.yml        analyze/test + 三端构建 + Release
 ```
 
-**为什么仓库里没有 android/、windows/、macos/ 目录？**
-原生壳由 Flutter SDK 版本决定，硬编码进仓库会随 SDK 升级产生大量冲突。因此统一由 `tool/bootstrap.sh` 或 CI 里的 `flutter create` 生成，代码库只维护 Dart 侧。需要自定义 Android 签名或 macOS 公证时，把对应目录从 `.gitignore` 里放出来提交即可。
-*Why isn't `android/`, `windows/`, `macos/` in the repo? The shells depend on the Flutter SDK version; committing them causes constant conflicts on SDK upgrades. They're generated by `tool/bootstrap.sh` or `flutter create` in CI, so the repo only tracks Dart code. To customize Android signing or macOS notarization, un-ignore those directories and commit them.*
+**为什么仓库里没有 android/ 目录？**
+原生壳由 Flutter SDK 版本决定，硬编码进仓库会随 SDK 升级产生大量冲突。因此统一由 `tool/bootstrap.sh` 或 CI 里的 `flutter create` 生成，代码库只维护 Dart 侧。需要自定义签名时，把 `android/` 从 `.gitignore` 里放出来提交即可。
+*Why isn't `android/` in the repo? The shell depends on the Flutter SDK version; committing it causes constant conflicts on SDK upgrades. It's generated by `tool/bootstrap.sh` or `flutter create` in CI, so the repo only tracks Dart code. To customize signing, un-ignore `android/` and commit it.*
 
 ---
 
 ## 快速开始 / Quick Start
 
 ```bash
-# 1. 生成本机原生壳（可只生成部分平台）/ generate native shells (subset is fine)
-PLATFORMS=android,windows,macos ./tool/bootstrap.sh
+# 1. 生成 Android 原生壳 / generate the Android shell
+./tool/bootstrap.sh
 
-# 2. 运行 / run
-flutter run -d windows          # Windows
-flutter run -d macos            # macOS
-flutter run -d <device-id>      # Android（flutter devices 查看 / see `flutter devices`）
+# 2. 运行（先用 flutter devices 查设备 id） / run (check `flutter devices` first)
+flutter run -d <device-id>
 ```
 
-Windows 用户在 PowerShell 里执行 `.\tool\bootstrap.ps1`。
-*On Windows, run `.\tool\bootstrap.ps1` in PowerShell.*
+Windows / macOS 用户在各自终端里执行 `tool/bootstrap.sh` 或 `tool/bootstrap.ps1`。
+*On Windows / macOS, run `tool/bootstrap.sh` or `tool/bootstrap.ps1` respectively.*
 
 改动包名 / 组织名 — *To change the package / organization name*:
 
@@ -122,7 +123,7 @@ flutter pub get
 | 显示名（窗口标题 / 新标签页）Display name | 原样使用 / as-is | `MyBrowser` |
 | Dart 包名（`pubspec` / `import`）Dart package | 自动 slug 化 / auto-slugified | `my_browser` |
 | Android / iOS 包名 Bundle ID | `--org` 指定 / from `--org` | `com.myname.my_browser` |
-| CI 产物名 / CI artifact | 跟随显示名 / follows display name | `MyBrowser-windows-x64.zip` |
+| CI 产物名 / CI artifact | 跟随显示名 / follows display name | `app-arm64-v8a-release.apk` |
 
 名字里带英文别名的写法也可以：`python3 tool/rename.py "小浏览器 MyBrowser"`。纯中文名不行——`pubspec` 的 `name` 只允许 `a-z0-9_`，脚本会提示加上英文别名。
 *A Chinese name with an English alias also works: `python3 tool/rename.py "小浏览器 MyBrowser"`. A purely Chinese name won't — `pubspec`'s `name` only allows `a-z0-9_`, and the script will prompt you for an alias.*
@@ -163,7 +164,7 @@ git push -u origin main
 ```
 
 - 推 `main` / 提 PR → 跑 analyze + test · *Pushing `main` or opening a PR runs analyze + test*
-- 打 tag `git tag v0.1.0 && git push --tags` → 自动构建并在 Release 挂上：`benbrowser-android（3 个 ABI 的 APK）`、`BenBrowser-windows-x64.zip`、`BenBrowser-macos.zip` · *Tagging builds everything and attaches: `benbrowser-android` (3 ABI APKs), `BenBrowser-windows-x64.zip`, `BenBrowser-macos.zip`*
+- 打 tag `git tag v0.1.0 && git push --tags` → 自动构建并在 Release 挂上 3 个 ABI 的 APK · *Tagging builds and attaches 3 per-ABI APKs*
 
 > CI 里的 `flutter create` 会用模板覆盖 `lib/main.dart`，还会生成引用 `MyApp` 的 `test/widget_test.dart`。workflow 已经做了备份还原 + 删除模板测试，本地跑 `tool/bootstrap.sh` 也一样处理。如果你自己改了 workflow，记得保留这两步，否则打出来的包会是计数器 demo。
 > *`flutter create` in CI overwrites `lib/main.dart` from the template and generates `test/widget_test.dart` referencing `MyApp`. The workflow backs up and restores the file and deletes that template test; `tool/bootstrap.sh` does the same locally. If you edit the workflow, keep those two steps or your builds will ship the counter demo.*
@@ -182,10 +183,11 @@ git push -u origin main
 
 ## 平台注意事项 / Platform Notes
 
-- **Windows** — Win10 未预装 WebView2 时首次启动会报错，安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) 即可；Win11 自带 · *Windows 10 without WebView2 fails on first launch; install the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/). Windows 11 bundles it*
-- **macOS** — Release 包默认 ad-hoc 签名，别人电脑上会被 Gatekeeper 拦。分发前用 Developer ID 签名 + 公证 · *Release builds are ad-hoc signed and blocked by Gatekeeper elsewhere; sign with a Developer ID and notarize before distribution*
-- **Android** — http 明文站点已通过补丁脚本开启；`minSdkVersion` 若低于 21 需自行上调 · *Cleartext HTTP is enabled by the patch script; raise `minSdkVersion` if it's below 21*
-- **网络权限 Network** — Android INTERNET 权限与 macOS `network.client` entitlement 已由 `tool/patch_platform.py` 注入 · *The Android INTERNET permission and the macOS `network.client` entitlement are injected by `tool/patch_platform.py`*
+- **系统 WebView** — 本项目不带内核，依赖系统自带的 WebView。老设备或定制 ROM 上如遇白屏，先去应用商店更新「Android System WebView」· *This app bundles no engine and relies on the system WebView. If pages render blank on older devices or custom ROMs, update "Android System WebView" from the Play Store first*
+- **安装 APK** — 需授权「允许安装未知应用」（Android 8.0+ 的硬性要求）· *Requires granting "install unknown apps" (a hard requirement since Android 8.0)*
+- **明文 http** — `usesCleartextTraffic` 已由 `tool/patch_platform.py` 打开 · *Cleartext HTTP is enabled by `tool/patch_platform.py`*
+- **minSdkVersion** — 若低于 21 需自行上调 · *Raise it if it's below 21*
+- **签名** — Release APK 目前用调试密钥签名，能正常安装，但上架 Google Play 需另配 keystore · *Release APKs are signed with the debug key: they install fine, but publishing to Google Play requires your own keystore*
 
 ---
 
