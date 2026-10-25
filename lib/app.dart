@@ -5,6 +5,7 @@ import 'core/app_theme.dart';
 import 'core/constants.dart';
 import 'data/models/app_settings.dart';
 import 'features/browser/browser_page.dart';
+import 'features/settings/startup_update_check.dart';
 import 'state/providers.dart';
 
 class BenBrowserApp extends ConsumerWidget {
@@ -25,7 +26,7 @@ class BenBrowserApp extends ConsumerWidget {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: mode,
-      home: const BrowserPage(),
+      home: const StartupUpdateCheck(child: BrowserPage()),
     );
   }
 }
