@@ -1,8 +1,8 @@
-# 生成各平台原生壳（Windows 端用 PowerShell 跑）
+# 生成 Android 原生壳（Windows 端用 PowerShell 跑）
 # 用法： .\tool\bootstrap.ps1
 param(
     [string]$Org = "com.ben",
-    [string]$Platforms = "android,windows,macos,linux"
+    [string]$Platforms = "android"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,7 +14,6 @@ if (Test-Path "lib\main.dart") {
     Copy-Item "lib\main.dart" $backup -Force
 }
 
-flutter config --enable-windows-desktop --enable-macos-desktop --enable-linux-desktop
 flutter create --org $Org --project-name ben_browser --platforms $Platforms .
 
 if (Test-Path $backup) {
