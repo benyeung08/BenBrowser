@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants.dart';
-import '../../core/platform_info.dart';
 import '../../core/url_utils.dart';
 import '../../data/models/browser_tab.dart';
 // ★ bookmarksProvider / bookmarkRepositoryProvider / tabsProvider 定义在这里，
@@ -95,13 +94,6 @@ class _BrowserToolbarState extends ConsumerState<BrowserToolbar> {
               tab.isLoading ? BrowserAction.stop : BrowserAction.reload,
             ),
           ),
-          if (!useCompactLayout)
-            IconButton(
-              tooltip: '主页',
-              icon: const Icon(Icons.home_outlined),
-              onPressed: () =>
-                  performBrowserAction(ref, tab, BrowserAction.home),
-            ),
           const SizedBox(width: 4),
           Expanded(
             child: TextField(
