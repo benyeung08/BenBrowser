@@ -1,49 +1,35 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/release_info.dart';
+import '../../features/downloads/downloads_page.dart';
 import '../../services/update_service.dart';
+import '../../state/downloads_controller.dart';
+import '../../state/providers.dart';
 
 /// 发现新版本后的更新弹窗。
-/// Android 支持下载后直接唤起安装器，桌面端统一跳浏览器下载。
-class UpdateDialog extends ConsumerStatefulWidget {
+///
+/// Android 上点「后台下载」交给浏览器的下载管理器（与网页下载同一套），
+/// 进度在「下载」页可见，完成后点「安装」唤起系统安装器。
+class UpdateDialog extends ConsumerWidget {
   const UpdateDialog({
     super.key,
     required this.release,
     required this.currentVersion,
-    this.service,
   });
 
   final ReleaseInfo release;
   final String currentVersion;
-  final UpdateService? service;
 
   @override
-  ConsumerState<UpdateDialog> createState() => _UpdateDialogState();
-}
-
-class _UpdateDialogState extends ConsumerState<UpdateDialog> {
-  bool _downloading = false;
-  double _progress = 0;
-  String? _error;
-
-  UpdateService get _service =>
-      widget.service ?? ref.read(updateServiceProvider);
-
-  ReleaseAsset? get _asset => _service.pickAsset(widget.release);
-
-  bool get _canInstall => _service.canInstallInApp && _asset != null;
-
-  @override
-  Widget build(BuildContext context) {
-    final release = widget.release;
-    final asset = _asset;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final svc = ref.watch(updateServiceProvider);
+    final asset = svc.pickAsset(release);
+    final canInstall = asset != null;
     final theme = Theme.of(context);
-    // 取到局部变量再判空：Dart 不会对 public field 做空值提升，
-    // 用局部变量可以彻底避免 `!`
     final published = release.publishedAt;
-    final error = _error;
 
     return AlertDialog(
       icon: const Icon(Icons.system_update_alt),
@@ -61,7 +47,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                 children: [
                   Chip(
                     avatar: const Icon(Icons.arrow_upward, size: 14),
-                    label: Text('当前 ${widget.currentVersion}'),
+                    label: Text('当前 $currentVersion'),
                     visualDensity: VisualDensity.compact,
                   ),
                   if (published != null)
@@ -78,8 +64,8 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                     ),
                 ],
               ),
-              const SizedBox(height: 12),
               if (release.hasNotes) ...[
+                const SizedBox(height: 12),
                 Text('更新内容', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 6),
                 Text(
@@ -89,35 +75,17 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
-              if (_canInstall) ...[
-                const SizedBox(height: 12),
-                Text(
-                  '下载完成后会唤起系统安装器。若没弹出安装界面，'
-                  '请在系统设置里允许本应用「安装未知应用」。',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+              const SizedBox(height: 12),
+              Text(
+                canInstall
+                    ? '下载在后台进行，进度可在「菜单 → 下载」查看；'
+                        '完成后点安装，按提示允许安装未知应用即可。'
+                    : '桌面端不支持静默安装，将打开浏览器下载页，'
+                        '下载后手动替换即可。',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-              ],
-              if (_downloading) ...[
-                const SizedBox(height: 16),
-                LinearProgressIndicator(value: _progress > 0 ? _progress : null),
-                const SizedBox(height: 6),
-                Text(
-                  _progress > 0
-                      ? '下载中 ${(_progress * 100).toInt()}%'
-                      : '准备下载…',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
-              if (error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  error,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error),
-                ),
-              ],
+              ),
             ],
           ),
         ),
@@ -130,63 +98,50 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
         TextButton.icon(
           icon: const Icon(Icons.open_in_browser, size: 18),
           label: const Text('浏览器打开'),
-          onPressed: () => _openInBrowser(),
+          onPressed: () {
+            final url = asset?.browserDownloadUrl ?? release.htmlUrl;
+            unawaited(svc.openInBrowser(url));
+          },
         ),
-        if (_canInstall)
+        if (canInstall && asset != null)
           FilledButton.icon(
             icon: const Icon(Icons.download, size: 18),
-            label: const Text('下载并安装'),
-            onPressed: _downloading ? null : () => _downloadAndInstall(),
-          )
-        else if (asset != null)
-          FilledButton.icon(
-            icon: const Icon(Icons.download, size: 18),
-            label: const Text('下载安装包'),
-            onPressed: _downloading ? null : () => _openInBrowser(asset),
+            label: const Text('后台下载'),
+            onPressed: () => _startDownload(context, ref, asset),
           ),
       ],
     );
   }
 
-  Future<void> _downloadAndInstall() async {
-    final asset = _asset;
-    if (asset == null) return;
-
-    setState(() {
-      _downloading = true;
-      _progress = 0;
-      _error = null;
-    });
-
-    String? path;
-    try {
-      path = await _service.download(asset, (received, total) {
-        if (!mounted) return;
-        setState(() {
-          _progress = total > 0 ? received / total : 0;
-        });
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _downloading = false;
-        _error = '下载失败：$e';
-      });
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() => _downloading = false);
-
+  Future<void> _startDownload(
+    BuildContext context,
+    WidgetRef ref,
+    ReleaseAsset asset,
+  ) async {
+    // 交给浏览器自带的下载管理器，进度与网页下载一致
+    await ref.read(downloadsProvider.notifier).start(
+          asset.browserDownloadUrl,
+          fileName: asset.name,
+          kind: DownloadKind.update,
+          version: release.version,
+        );
+    if (!context.mounted) return;
     Navigator.of(context).pop();
-    await _service.install(path);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('v${release.version} 正在后台下载'),
+        action: SnackBarAction(
+          label: '查看',
+          onPressed: () => _openDownloads(context),
+        ),
+      ),
+    );
   }
 
-  Future<void> _openInBrowser([ReleaseAsset? asset]) async {
-    final url = (asset ?? _asset)?.browserDownloadUrl ?? widget.release.htmlUrl;
-    await launchUrl(
-      Uri.parse(url),
-      mode: LaunchMode.externalApplication,
+  static Future<void> _openDownloads(BuildContext context) async {
+    final nav = Navigator.of(context);
+    await nav.push(
+      MaterialPageRoute<void>(builder: (_) => const DownloadsPage()),
     );
   }
 
