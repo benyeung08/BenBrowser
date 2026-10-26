@@ -191,6 +191,11 @@ jobs:
     # 同上：改成 `if: false` 可跳过 Windows 构建
     if: true
     runs-on: windows-latest
+    # Windows 控制台默认 cp1252，Python 打印中文日志会抛 UnicodeEncodeError
+    # 让补丁脚本崩掉。脚本内部已自愈，这里再加一道环境变量保险。
+    env:
+      PYTHONIOENCODING: utf-8
+      PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
