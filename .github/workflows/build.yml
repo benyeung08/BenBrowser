@@ -101,6 +101,17 @@ jobs:
       - name: 构建 APK（按 ABI 拆分）
         run: flutter build apk --release --split-per-abi
 
+      - name: 校验 APK 产物
+        run: |
+          echo "输出目录内容："
+          ls -l build/app/outputs/flutter-apk/ || true
+          COUNT=$(ls build/app/outputs/flutter-apk/*.apk 2>/dev/null | wc -l)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::没有生成任何 APK，构建实际上失败了"
+            exit 1
+          fi
+          echo "共生成 $COUNT 个 APK"
+
       # 需要上架 Play 时打开：先在 android/key.properties 与 android/app/keystore.jks
       # 配置签名，并把密钥以 secrets 传入，再启用下面两步生成 AAB。
       # - name: 构建 AAB
@@ -157,9 +168,35 @@ jobs:
       - name: 构建 Windows 桌面版
         run: flutter build windows --release
 
+      - name: 校验构建产物
+        shell: bash
+        run: |
+          echo "Flutter 版本："
+          flutter --version
+          DIR="build/windows/x64/runner/Release"
+          if [ ! -d "$DIR" ]; then
+            echo "::error::未找到 $DIR，Windows 构建失败"
+            echo "build 目录实际内容："
+            find build -maxdepth 4 -type d 2>/dev/null | head -20 || true
+            exit 1
+          fi
+          echo "Release 目录内容："
+          ls -l "$DIR"
+          if [ ! -f "$DIR/ben_browser.exe" ]; then
+            echo "::warning::未找到 ben_browser.exe，产物名可能不同"
+            ls "$DIR"/*.exe 2>/dev/null || true
+          fi
+
       - name: 打包
         shell: pwsh
-        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath BenBrowser-windows-x64.zip
+        run: |
+          $src = "build\windows\x64\runner\Release\*"
+          if (-not (Test-Path "build\windows\x64\runner\Release")) {
+            Write-Error "Release 目录不存在"
+            exit 1
+          }
+          Compress-Archive -Path $src -DestinationPath BenBrowser-windows-x64.zip
+          Get-Item BenBrowser-windows-x64.zip | Select-Object Name, Length
 
       - uses: actions/upload-artifact@v4
         with:
