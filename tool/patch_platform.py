@@ -231,6 +231,12 @@ def patch_android() -> None:
         attr2 = f"{{{ANDROID_NS}}}hardwareAccelerated"
         if application.get(attr2) is None:
             application.set(attr2, "true")
+        # Android 17 起 usesCleartextTraffic 已废弃，官方建议改用
+        # 网络安全配置。两者并存时以配置为准。
+        nsc_attr = f"{{{ANDROID_NS}}}networkSecurityConfig"
+        if application.get(nsc_attr) is None:
+            application.set(nsc_attr, "@xml/network_security_config")
+            log("android: + networkSecurityConfig=@xml/network_security_config")
 
         # FileProvider：Android 7.0+ 禁止 file:// URI，
         # 不配这段的话「下载并安装」打开 APK 会抛 FileUriExposedException
@@ -255,7 +261,36 @@ def patch_android() -> None:
     log("android: manifest updated")
 
     _write_file_paths()
+    _write_network_security_config()
     _patch_gradle()
+
+
+def _write_network_security_config() -> None:
+    """Android 17 起 android:usesCleartextTraffic 已废弃，
+    官方建议改用网络安全配置来声明明文流量放行。
+
+    顺带把用户 CA 也纳入信任锚——访问内网 / 自签证书的站点时会用到。
+    """
+    xml_dir = os.path.join(ROOT, "android", "app", "src", "main", "res", "xml")
+    path = os.path.join(xml_dir, "network_security_config.xml")
+    if os.path.isfile(path):
+        return
+
+    os.makedirs(xml_dir, exist_ok=True)
+    content = """<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 放行 http 明文站点（对应已废弃的 usesCleartextTraffic） -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
+"""
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(content)
+    log("android: + res/xml/network_security_config.xml")
 
 
 def _write_file_paths() -> None:
