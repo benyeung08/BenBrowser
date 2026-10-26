@@ -6,10 +6,9 @@ version: 0.1.0+1
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
-  # 3.38 是「Android 16 支持」的门槛：
-  # - flutter.compileSdkVersion / targetSdkVersion 首次同时为 36
-  # - 默认 NDK 升到 r28，这是 16KB 内存分页对齐的最低要求
-  # 更低的版本打不出符合 Android 16 的包。
+  # 3.38 是门槛：默认 NDK 升到 r28（16KB 内存分页对齐的最低要求）。
+  # 本项目要 target 到 Android 17（API 37），由 tool/patch_platform.py
+  # 强制覆盖 flutter.compileSdkVersion，所以不依赖 SDK 自带的默认值。
   flutter: '>=3.38.0'
 
 dependencies:
@@ -19,10 +18,10 @@ dependencies:
   # 状态管理
   flutter_riverpod: ^2.6.1
 
-  # WebView 内核（Android: 系统 WebView / Windows: WebView2 / macOS: WKWebView）
+  # WebView 内核（Android: 系统 WebView / Windows: WebView2）
   flutter_inappwebview: ^6.1.0
 
-  # 本地存储（设置 / 书签 / 历史，桌面端与移动端均有实现）
+  # 本地存储（设置 / 书签 / 历史，Android 与 Windows 均有实现）
   shared_preferences: ^2.3.3
   path_provider: ^2.1.4
 
