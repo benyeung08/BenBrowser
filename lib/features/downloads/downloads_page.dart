@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/platform_info.dart';
 import '../../data/models/download_task.dart';
 import '../../state/downloads_controller.dart';
 
@@ -49,7 +50,8 @@ class _TaskTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(downloadsProvider.notifier);
     final theme = Theme.of(context);
-    final canInstall = task.isUpdate && task.status == DownloadStatus.done;
+    final canInstall =
+        task.isUpdate && task.status == DownloadStatus.done && isAndroidHost;
 
     return ListTile(
       leading: Icon(_icon(task.status)),
