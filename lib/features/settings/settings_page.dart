@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +9,7 @@ import '../../data/models/release_info.dart';
 import '../../services/update_service.dart';
 import '../../state/providers.dart';
 import '../browser/navigation.dart';
+import '../downloads/downloads_page.dart';
 import 'update_dialog.dart';
 
 /// 设置页
@@ -114,6 +117,17 @@ class SettingsPage extends ConsumerWidget {
             ),
             const _SectionTitle(title: '更新'),
             _UpdateTile(),
+            ListTile(
+              leading: const Icon(Icons.download_outlined),
+              title: const Text('查看下载'),
+              subtitle: const Text('更新包与网页下载都在这里，Android 可直接安装'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const DownloadsPage(),
+                ),
+              ),
+            ),
             _TextTile(
               label: 'GitHub 仓库',
               value: settings.repoSlug,
@@ -124,7 +138,7 @@ class SettingsPage extends ConsumerWidget {
             ),
             SwitchListTile(
               title: const Text('启动时自动检查更新'),
-              subtitle: const Text('有新版时弹窗提示，不会自动下载'),
+              subtitle: const Text('有新版时弹窗提示，需你确认后才下载'),
               value: settings.checkUpdateOnLaunch,
               onChanged: (v) => ref
                   .read(settingsProvider.notifier)
@@ -144,7 +158,9 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
-/// 「检查更新」入口：显示当前版本，点击后查询 GitHub 最新 Release
+/// 「检查更新」入口：显示当前版本，点击后查询 GitHub 最新 Release。
+/// 有新版本时弹出更新对话框；Android 上点「后台下载」会交给浏览器的
+/// 下载管理器处理，进度可在「下载」页看到。
 class _UpdateTile extends ConsumerStatefulWidget {
   const _UpdateTile();
 
@@ -159,7 +175,7 @@ class _UpdateTileState extends ConsumerState<_UpdateTile> {
   @override
   void initState() {
     super.initState();
-    _loadVersion();
+    unawaited(_loadVersion());
   }
 
   Future<void> _loadVersion() async {
