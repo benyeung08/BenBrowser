@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/app_settings.dart';
@@ -8,6 +9,7 @@ import '../data/repositories/bookmark_repository.dart';
 import '../data/repositories/history_repository.dart';
 import '../data/repositories/settings_repository.dart';
 import '../data/storage/prefs_store.dart';
+import '../services/update_service.dart';
 
 /// 持久化存储单例
 final prefsStoreProvider =
@@ -77,3 +79,7 @@ final historyProvider = FutureProvider<List<HistoryEntry>>((ref) async {
   final repo = await ref.watch(historyRepositoryProvider.future);
   return repo.all();
 });
+
+/// 应用内更新服务（内部自带 Dio 实例）
+final updateServiceProvider =
+    Provider<UpdateService>((ref) => UpdateService(Dio()));
