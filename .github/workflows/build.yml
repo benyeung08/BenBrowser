@@ -80,9 +80,15 @@ jobs:
           echo "runner 已安装的 platform："
           ls "$ANDROID_HOME/platforms" || true
 
-          AVAIL=$(ls "$ANDROID_HOME/platforms" 2>/dev/null \
-            | grep -oE 'android-[0-9]+' | cut -d- -f2 | sort -n | tail -1)
-          echo "检测到可用最高 SDK：${AVAIL:-未检测到}"
+          # 不能只看目录名在不在：sdkmanager 装到一半失败也会留下空目录，
+          # 那样 gradle 会报一堆莫名其妙的错。必须确认 android.jar 真的存在。
+          AVAIL=""
+          for d in "$ANDROID_HOME"/platforms/android-*; do
+            [ -f "$d/android.jar" ] || continue
+            n=$(basename "$d" | cut -d- -f2)
+            if [ -z "$AVAIL" ] || [ "$n" -gt "$AVAIL" ]; then AVAIL=$n; fi
+          done
+          echo "检测到可用的最高完整 SDK：${AVAIL:-未检测到}"
 
           if [ -n "$AVAIL" ] && [ "$AVAIL" -ge 37 ]; then
             echo "ANDROID_COMPILE_SDK=37" >> "$GITHUB_ENV"
@@ -118,6 +124,15 @@ jobs:
           rm -f test/widget_test.dart
       - name: 打补丁（http 明文 / 网络权限）
         run: python3 tool/patch_platform.py
+
+      # 直接把生效值打进日志，构建出问题时一眼能看出是不是 SDK 版本不对
+      - name: 打印生效的 SDK 配置
+        run: |
+          echo "--- build.gradle 关键行 ---"
+          grep -nE "compileSdk|targetSdk|minSdk|ndkVersion" android/app/build.gradle || true
+          echo "--- AndroidManifest 关键项 ---"
+          grep -oE 'android:(usesCleartextTraffic|networkSecurityConfig|hardwareAccelerated)="[^"]*"' \
+            android/app/src/main/AndroidManifest.xml || true
       - run: flutter pub get
 
       # 日志落盘：pipefail 保证 build 的失败码不被 tee 吃掉
