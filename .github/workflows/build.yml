@@ -8,12 +8,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# 构建开关：某个平台在 CI 上调不通时，把这里改成 'false' 即可单独跳过，
-# 不用删整段 job，也不用改代码。改回 'true' 就恢复。
-env:
-  BUILD_ANDROID: 'true'
-  BUILD_WINDOWS: 'true'
-
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
@@ -50,7 +44,10 @@ jobs:
   android:
     name: android
     needs: verify
-    if: env.BUILD_ANDROID == 'true'
+    # 开关：改成 `if: false` 即可单独跳过这个平台，不用删整段 job。
+    # 注意：这里不能写 env.XXX —— GitHub Actions 的 job 级 if 不支持
+    # env context，写了会让整个 workflow 文件失效、所有 job 都不执行。
+    if: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -180,7 +177,8 @@ jobs:
   windows:
     name: windows
     needs: verify
-    if: env.BUILD_WINDOWS == 'true'
+    # 同上：改成 `if: false` 可跳过 Windows 构建
+    if: true
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
