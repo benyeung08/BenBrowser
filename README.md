@@ -291,15 +291,17 @@ ANDROID_KEEP_FLUTTER_SDK=true python3 tool/patch_platform.py
 覆盖成字面量的代价是：**构建环境必须装好 Android SDK Platform 37**，否则 Gradle
 会报 `failed to find target`。
 
-CI 里会先更新 `sdkmanager` 再安装 `platforms;android-37`，装不上就**直接失败**，
-不会悄悄降级——因为降级后打出来的包并不是真正的 Android 17 目标，那等于假的。
-若 runner 暂时提供不了 37，可在 workflow 的 android job 里临时加：
+CI 会先更新 `sdkmanager` 再安装 `platforms;android-37`。**若 runner 确实提供不了，
+会自动用其最高可用版本继续构建**，并在日志里打出醒目 warning——挂掉整条流水线、
+一个包都出不来没有意义，降级只影响 `targetSdk`，`minSdk 29` 与全部功能都不变。
+想强制锁定某个版本，在 workflow 的 android job 里设：
 
 ```yaml
 env:
-  ANDROID_TARGET_SDK: 36
+  ANDROID_TARGET_SDK: 37   # 或 36
+  ANDROID_COMPILE_SDK: 37
 ```
-*CI updates `sdkmanager` then installs `platforms;android-37`, and **fails hard** if unavailable — silently downgrading would produce a package that isn't really targeting Android 17. If the runner can't provide 37 yet, temporarily add `ANDROID_TARGET_SDK: 36` to the android job's `env`.*
+*CI updates `sdkmanager` then installs `platforms;android-37`. **If the runner can't provide it, the build continues with the highest available API** and logs a prominent warning — failing the whole pipeline and shipping nothing helps no one; downgrading only affects `targetSdk`, while `minSdk 29` and all functionality stay the same. To pin a version, set `ANDROID_TARGET_SDK` / `ANDROID_COMPILE_SDK` in the android job's `env`.*
 *The cost of pinning a literal is that **Android SDK Platform 37 must be installed** or Gradle fails with `failed to find target`. CI installs it and **fails hard** if it's unavailable, rather than silently downgrading.*
 
 #### 为什么 minSdk 定在 29（Android 10）
