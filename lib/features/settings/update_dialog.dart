@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/models/download_task.dart';
 import '../../data/models/release_info.dart';
 import '../../features/downloads/downloads_page.dart';
 import '../../services/desktop_update.dart';
@@ -207,7 +208,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
           )
-        else if (canInstall && asset != null)
+        else if (canInstall)
           FilledButton.icon(
             icon: const Icon(Icons.download, size: 18),
             label: const Text('后台下载'),

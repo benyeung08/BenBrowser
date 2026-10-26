@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../data/models/app_settings.dart';
 import '../../data/models/release_info.dart';
-import '../../services/update_service.dart';
 import '../../state/providers.dart';
 import '../browser/navigation.dart';
 import '../downloads/downloads_page.dart';
@@ -116,7 +115,7 @@ class SettingsPage extends ConsumerWidget {
               },
             ),
             const _SectionTitle(title: '更新'),
-            _UpdateTile(),
+            const _UpdateTile(),
             ListTile(
               leading: const Icon(Icons.download_outlined),
               title: const Text('查看下载'),
