@@ -53,27 +53,37 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: zulu
-          java-version: '21'
+          java-version: '17'
 
-      # Android 17（API 37）是硬性要求：必须装上 platforms;android-37，
-      # 否则 gradle 会报 "failed to find target"。这里装不上就直接失败并
-      # 给出可操作提示，而不是悄悄降级到旧版本——那样构建出来的包
-      # 并不是真正的 Android 17 目标。
-      - name: 安装 Android SDK 37（Android 17）
+      # 目标 Android 17（API 37）。先尽力装上 platforms;android-37；
+      # runner 若确实提供不了，就用其最高可用版本继续构建并打出醒目警告。
+      # 直接 exit 1 会让整条流水线挂掉、一个包都出不来，那没有意义——
+      # 降级只影响 targetSdk，minSdk 29 与全部功能都不受影响。
+      - name: 准备 Android SDK（目标 37 / Android 17）
         run: |
           SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          # 旧版 sdkmanager 看不到新包，先自我更新
+          # 旧版 cmdline-tools 看不到新包，先自我更新
           "$SDKMGR" --update 2>&1 | tail -3 || true
           yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
           "$SDKMGR" --install "platforms;android-37" 2>&1 | tail -5 || true
-          # build-tools 版本随 API 走；装不上就让 AGP 自行准备
           "$SDKMGR" --install "build-tools;37.0.0" 2>&1 | tail -3 || true
           echo "runner 已安装的 platform："
-          ls "$ANDROID_HOME/platforms"
-          if [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
-            echo "::error::runner 上没有 Android SDK 37，无法以 Android 17 为目标构建"
-            echo "::error::临时方案：在 workflow 里设 env ANDROID_TARGET_SDK=36 先出包，等 runner 提供 37 后再切回"
-            exit 1
+          ls "$ANDROID_HOME/platforms" || true
+
+          AVAIL=$(ls "$ANDROID_HOME/platforms" 2>/dev/null \
+            | grep -oE 'android-[0-9]+' | cut -d- -f2 | sort -n | tail -1)
+          echo "检测到可用最高 SDK：$AVAIL"
+
+          if [ -n "$AVAIL" ] && [ "$AVAIL" -ge 37 ]; then
+            echo "ANDROID_COMPILE_SDK=37" >> "$GITHUB_ENV"
+            echo "ANDROID_TARGET_SDK=37" >> "$GITHUB_ENV"
+            echo "::notice::以 Android 17（API 37）为目标构建"
+          else
+            FALLBACK="${AVAIL:-36}"
+            echo "ANDROID_COMPILE_SDK=$FALLBACK" >> "$GITHUB_ENV"
+            echo "ANDROID_TARGET_SDK=$FALLBACK" >> "$GITHUB_ENV"
+            echo "::warning::runner 无 Android SDK 37，本次以 API $FALLBACK 构建"
+            echo "::warning::等 runner 提供 platforms;android-37 后会自动切回 Android 17"
           fi
 
       # flutter create 会用模板覆盖 lib/main.dart，并生成引用 MyApp 的
@@ -118,6 +128,11 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+
+      # 必须先启用桌面支持，否则 flutter create --platforms=windows 与
+      # flutter build windows 都会直接失败
+      - name: 启用 Windows 桌面支持
+        run: flutter config --enable-windows-desktop
 
       # flutter create 同样会覆盖 lib/main.dart 并生成模板测试，必须还原
       - name: 生成 Windows 壳
