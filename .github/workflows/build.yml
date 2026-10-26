@@ -53,16 +53,28 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: zulu
-          java-version: '17'
+          java-version: '21'
 
-      # targetSdk 37（Android 17）需要对应的 SDK Platform，runner 自带的
-      # 未必有，先补装。装不上不会中断流程（SDK 若已有 37 就够用了）。
-      - name: 安装 Android SDK Platform 37
-        continue-on-error: true
+      # Android 17（API 37）是硬性要求：必须装上 platforms;android-37，
+      # 否则 gradle 会报 "failed to find target"。这里装不上就直接失败并
+      # 给出可操作提示，而不是悄悄降级到旧版本——那样构建出来的包
+      # 并不是真正的 Android 17 目标。
+      - name: 安装 Android SDK 37（Android 17）
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            --install "platforms;android-37" 2>&1 | tail -5 || true
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          # 旧版 sdkmanager 看不到新包，先自我更新
+          "$SDKMGR" --update 2>&1 | tail -3 || true
+          yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
+          "$SDKMGR" --install "platforms;android-37" 2>&1 | tail -5 || true
+          # build-tools 版本随 API 走；装不上就让 AGP 自行准备
+          "$SDKMGR" --install "build-tools;37.0.0" 2>&1 | tail -3 || true
+          echo "runner 已安装的 platform："
+          ls "$ANDROID_HOME/platforms"
+          if [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
+            echo "::error::runner 上没有 Android SDK 37，无法以 Android 17 为目标构建"
+            echo "::error::临时方案：在 workflow 里设 env ANDROID_TARGET_SDK=36 先出包，等 runner 提供 37 后再切回"
+            exit 1
+          fi
 
       # flutter create 会用模板覆盖 lib/main.dart，并生成引用 MyApp 的
       # test/widget_test.dart，两者都会让打包结果变成计数器 demo，必须还原
