@@ -12,7 +12,7 @@ class AppConstants {
 
   /// 检查更新用的 GitHub 仓库（owner/repo）。
   /// ★ 推送到你自己的仓库后，把这里改成你的，或在设置页里直接改。
-  static const String defaultRepoSlug = 'OWNER/ben_browser';
+  static const String defaultRepoSlug = 'benyeung08/ben_browser';
 
   /// 仓库为空时的兜底提示
   static const String repoPlaceholder = 'OWNER';
