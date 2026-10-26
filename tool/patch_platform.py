@@ -41,6 +41,32 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
+# Windows 控制台默认用 cp1252（或 GBK），遇到中文日志字符会抛
+# UnicodeEncodeError 让整个脚本崩掉——而补丁脚本崩了会让 job 直接失败。
+# 这里无论如何都把 stdout/stderr 调成 UTF-8，失败就降级成 ASCII 安全输出。
+def _force_utf8_console() -> None:
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            try:
+                import io
+                import codecs
+
+                wrapped = codecs.getwriter("utf-8")(
+                    stream.buffer if hasattr(stream, "buffer") else stream,
+                    errors="replace",
+                )
+                setattr(sys, stream_name, wrapped)
+            except Exception:
+                pass
+
+
+_force_utf8_console()
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ANDROID_NS = "http://schemas.android.com/apk/res/android"
 VULKAN_FEATURE = "android.hardware.vulkan.version"
@@ -50,7 +76,21 @@ NAME_ATTR = f"{{{ANDROID_NS}}}name"
 
 
 def log(message: str) -> None:
-    print(f"[patch] {message}")
+    """打印日志。
+
+    双重保险：即使控制台编码没修好（比如极端环境下 reconfigure 失败），
+    也要把无法编码的字符替换掉而不是抛异常——补丁脚本挂掉会让整个
+    CI job 失败，那是本末倒置。
+    """
+    text = f"[patch] {message}"
+    try:
+        print(text)
+    except (UnicodeEncodeError, OSError):
+        try:
+            print(text.encode("utf-8", "replace").decode("utf-8", "replace"))
+        except Exception:
+            # 实在打不出来就放弃，绝不让日志影响构建
+            pass
 
 
 # ------------------------------------------------------------------ 版本号
