@@ -432,8 +432,14 @@ def patch_windows() -> None:
 
 
 def main() -> int:
-    patch_android()
-    patch_windows()
+    # 补丁是「锦上添花」：任何一步出错都不应该让构建挂掉。
+    # 万一某个平台的目录结构和预期不同，宁可跳过也别中断流水线——
+    # 否则排查时会被这个非致命错误误导，看不到真正的构建报错。
+    for fn in (patch_android, patch_windows):
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001
+            log(f"!! {fn.__name__} 出错但已忽略：{exc}")
     log("done")
     return 0
 
