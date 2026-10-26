@@ -11,7 +11,7 @@ import '../../state/providers.dart';
 import '../../state/tabs_controller.dart';
 
 /// 单个标签页的 WebView 载体。
-/// Android → 系统 WebView；Windows → WebView2；macOS → WKWebView。
+/// Android → 系统 WebView；Windows → WebView2。
 /// 三端共用同一份 Dart 代码，仅由插件在内部切换内核。
 ///
 /// 注意：所有回调一律写成**同步函数**，严格贴合插件声明的 void / FutureOr 签名。
@@ -103,7 +103,7 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
     );
   }
 
-  Future<void> _startDownload(String url) =>
+  Future<String> _startDownload(String url) =>
       ref.read(downloadsProvider.notifier).start(url);
 
   void _update({

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants.dart';
+import '../../core/platform_info.dart';
 import '../../data/models/browser_tab.dart';
 import '../../state/providers.dart';
 import '../../state/tabs_controller.dart';
@@ -36,7 +37,7 @@ class BrowserPage extends ConsumerWidget {
             if (active != null) BrowserToolbar(tab: active),
             if (active != null) _ProgressBar(tab: active),
             Expanded(child: _buildBody(ref, tabs)),
-            if (active != null) _BottomBar(tab: active),
+            if (active != null && useCompactLayout) _BottomBar(tab: active),
           ],
         ),
       ),
