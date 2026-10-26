@@ -6,7 +6,11 @@ version: 0.1.0+1
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
-  flutter: '>=3.22.0'
+  # 3.38 是「Android 16 支持」的门槛：
+  # - flutter.compileSdkVersion / targetSdkVersion 首次同时为 36
+  # - 默认 NDK 升到 r28，这是 16KB 内存分页对齐的最低要求
+  # 更低的版本打不出符合 Android 16 的包。
+  flutter: '>=3.38.0'
 
 dependencies:
   flutter:

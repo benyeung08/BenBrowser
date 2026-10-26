@@ -1,17 +1,21 @@
 # BenBrowser
 
-基于 **Flutter + Android 系统 WebView** 的个人自研浏览器：轻量、无自带内核，靠 GitHub Actions 自动出安装包。
-*A personal browser built on **Flutter + Android's system WebView**: lightweight, no bundled engine, built automatically by GitHub Actions.*
+基于 **Flutter + 各平台原生 WebView** 的个人自研浏览器：一份 Dart 代码，同时跑在 **Android / Windows** 上，靠 GitHub Actions 自动出两端安装包。
+*A personal browser built on **Flutter + each platform's native WebView**: one Dart codebase running on **Android / Windows**, with GitHub Actions building both automatically.*
 
-> 本项目已精简为**纯 Android**。早期版本支持的 Windows / macOS 已移除——
-> 桌面端静默更新依赖 Sparkle / WinSparkle，macOS 上还需要付费的 Apple Developer
-> 账号（$99/年）做签名公证，维护成本远高于收益。
-> *This project is now **Android-only**. Windows / macOS support has been removed — silent desktop updates depend on Sparkle / WinSparkle, and on macOS a paid Apple Developer account ($99/year) is required for signing and notarization. The maintenance cost outweighed the benefit.*
+| 平台 Platform | 内核 Engine | 要求 Requirements |
+| --- | --- | --- |
+| Android | 系统 WebView（Chromium） · *System WebView* | Android 10+ |
+| Windows | WebView2（Edge Chromium） | **Win10 1809+ / Win11**；Win10 需装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) · *Win11 bundles it* |
 
 | 项目 Item | 值 Value |
 | --- | --- |
-| 内核 Engine | Android 系统 WebView（Chromium），由厂商 / Google Play 更新 · *Android System WebView (Chromium), updated by the OEM / Play Store* |
-| 最低版本 Min SDK | 21（Android 5.0） |
+| Android 内核 Engine | 系统 WebView（Chromium），由厂商 / Google Play 更新 · *updated by the OEM / Play Store* |
+| 最低系统 minSdk | **29（Android 10）** |
+| 目标系统 targetSdk | **37（Android 17）** |
+| 渲染 Renderer | **Vulkan 优先**，无 Vulkan 的设备自动回退 **OpenGL ES 3.0** · ***Vulkan** preferred, auto-fallback to **GLES 3.0*** |
+| 编译 SDK compileSdk | **37（Android 17）** |
+| 构建要求 Build | Flutter ≥ 3.38、NDK r28、Android SDK Platform 37 · *Flutter ≥ 3.38, NDK r28, SDK Platform 37* |
 | 安装方式 Install | `app-<abi>-release.apk`，按 CPU 架构拆分 · *split per ABI* |
 
 ---
@@ -41,7 +45,33 @@
 **首次启用 / First-time setup**：设置 → 更新 → 把「GitHub 仓库」从默认的 `OWNER/ben_browser` 改成你自己的 `用户名/仓库名`。留着 `OWNER` 会被识别为未配置，不会发起请求。
 *Settings → Update → change "GitHub repository" from the default `OWNER/ben_browser` to your own `username/ben_browser`. Leaving `OWNER` in place is treated as "not configured" and no request is made.*
 
-**更新流程 / Update flow**：设置 → 更新 → 检查更新 → 发现新版本 → 「后台下载」→ 在「下载」页看进度 → 完成后点「安装」。
+**Android 更新流程 / Android update flow**：设置 → 更新 → 检查更新 → 发现新版本 → 「后台下载」→ 在「下载」页看进度 → 完成后点「安装」。
+*Settings → Update → Check for updates → new version found → "Download in background" → track progress in Downloads → tap "Install" when finished.*
+
+**Windows 更新流程 / Windows update flow**：设置 → 更新 → 检查更新 → 发现新版本 → 「**下载并安装**」→ 应用自动退出 → 替换完成 → **自动重启**。全程不用手动找文件。
+*Settings → Update → Check for updates → new version found → "**Download and install**" → the app exits → files are replaced → **relaunches automatically**. No manual file handling.*
+
+**原理 / How it works**：Windows 不允许覆盖正在运行的 `.exe` / `.dll`，所以程序没法自己替换自己。做法是——新版本解压到临时目录后，启动一个**脱离主进程的批处理脚本**，脚本等主程序退出、文件释放后再拷贝并重启。
+*Windows won't let a running `.exe`/`.dll` be overwritten, so an app can't replace itself. Instead: the new version is unpacked to a temp folder, then a **detached batch script** is launched — it waits for the main process to exit, copies the files, and relaunches the app.*
+
+```
+主程序                        updater.bat（独立进程）
+  │                                 │
+  ├─ 下载 zip ── 解压 ──┐            │
+  ├─ 生成脚本 ──────────┼── 启动 ───▶│ 等主进程 PID 消失
+  └─ exit(0) ───────────┘            ├─ robocopy 覆盖（失败回退 xcopy）
+                                     ├─ 启动新 exe
+                                     └─ 清理临时目录
+```
+
+日志写在临时目录的 `updater.log`，更新失败时可以翻它排查。
+*Logs go to `updater.log` in the temp folder — check it if an update fails.*
+
+**为什么没用 WinSparkle / Why not WinSparkle**：`auto_updater`（WinSparkle）是更标准的路子，但它要求把产物做成**安装包**（installer），还得维护 DSA 密钥和 `appcast.xml`。本项目 CI 直接出 portable zip，用自建脚本能原样复用产物，零证书零额外依赖。想换成标准方案的话，Windows 侧只需 DSA 密钥，不花钱。
+*`auto_updater` (WinSparkle) is the more standard route, but it requires shipping an **installer** plus maintaining DSA keys and an `appcast.xml`. This project's CI already emits a portable zip, so the self-built script reuses that artifact as-is — no certificates, no extra dependencies. Switching to the standard approach later would only need a DSA key on Windows, which is free.*
+
+> **安装目录必须可写** —— 别装在 `C:\Program Files\` 下（那里写入需要管理员权限，脚本会静默失败）。推荐解压到 `%LOCALAPPDATA%\BenBrowser` 这类用户目录。
+> *The install directory must be writable — don't put it under `C:\Program Files\` (writing there needs elevation and the script would fail silently). Unzip to a user-owned folder such as `%LOCALAPPDATA%\BenBrowser`.*
 *Settings → Update → Check for updates → new version found → "Download in background" → track progress in Downloads → tap "Install" when finished.*
 
 更新包走**浏览器自带下载器**（`DownloadKind.update`），在下载列表里带版本号徽章，只有下载完成的更新包才显示「安装」按钮。安装时需用户授权「允许安装未知应用」，这是 Android 的硬性要求。
@@ -73,28 +103,29 @@ lib/
     ├── bookmarks｜history｜downloads｜settings
 tool/
 ├── bootstrap.sh / .ps1            生成各平台原生壳 / generate platform shells
-└── patch_platform.py              Android 明文流量 + 安装权限 + FileProvider / cleartext, install permission, FileProvider
+└── patch_platform.py              Android 明文流量 / 权限 / FileProvider · *Android cleartext, permissions, FileProvider*
 .github/workflows/build.yml        analyze/test + 三端构建 + Release
 ```
 
-**为什么仓库里没有 android/ 目录？**
-原生壳由 Flutter SDK 版本决定，硬编码进仓库会随 SDK 升级产生大量冲突。因此统一由 `tool/bootstrap.sh` 或 CI 里的 `flutter create` 生成，代码库只维护 Dart 侧。需要自定义签名时，把 `android/` 从 `.gitignore` 里放出来提交即可。
-*Why isn't `android/` in the repo? The shell depends on the Flutter SDK version; committing it causes constant conflicts on SDK upgrades. It's generated by `tool/bootstrap.sh` or `flutter create` in CI, so the repo only tracks Dart code. To customize signing, un-ignore `android/` and commit it.*
+**为什么仓库里没有 android/、windows/ 目录？**
+原生壳由 Flutter SDK 版本决定，硬编码进仓库会随 SDK 升级产生大量冲突。因此统一由 `tool/bootstrap.sh` 或 CI 里的 `flutter create` 生成，代码库只维护 Dart 侧。需要自定义签名时，把对应目录从 `.gitignore` 里放出来提交即可。
+*Why isn't `android/`, `windows/` in the repo? The shells depend on the Flutter SDK version; committing them causes constant conflicts on SDK upgrades. They're generated by `tool/bootstrap.sh` or `flutter create` in CI, so the repo only tracks Dart code. To customize signing, un-ignore those directories and commit them.*
 
 ---
 
 ## 快速开始 / Quick Start
 
 ```bash
-# 1. 生成 Android 原生壳 / generate the Android shell
-./tool/bootstrap.sh
+# 1. 生成本机原生壳（可只生成部分平台）/ generate shells (subset is fine)
+PLATFORMS=android,windows ./tool/bootstrap.sh
 
-# 2. 运行（先用 flutter devices 查设备 id） / run (check `flutter devices` first)
-flutter run -d <device-id>
+# 2. 运行 / run
+flutter run -d windows          # Windows
+flutter run -d <device-id>      # Android（flutter devices 查看 / see `flutter devices`）
 ```
 
-Windows / macOS 用户在各自终端里执行 `tool/bootstrap.sh` 或 `tool/bootstrap.ps1`。
-*On Windows / macOS, run `tool/bootstrap.sh` or `tool/bootstrap.ps1` respectively.*
+Windows 用户在 PowerShell 里执行 `tool/bootstrap.ps1`，Linux / macOS 上用 `tool/bootstrap.sh` 生成 Android 壳。
+*On Windows, run `tool/bootstrap.ps1` in PowerShell; on Linux / macOS use `tool/bootstrap.sh` to generate the Android shell.*
 
 改动包名 / 组织名 — *To change the package / organization name*:
 
@@ -164,7 +195,7 @@ git push -u origin main
 ```
 
 - 推 `main` / 提 PR → 跑 analyze + test · *Pushing `main` or opening a PR runs analyze + test*
-- 打 tag `git tag v0.1.0 && git push --tags` → 自动构建并在 Release 挂上 3 个 ABI 的 APK · *Tagging builds and attaches 3 per-ABI APKs*
+- 打 tag `git tag v0.1.0 && git push --tags` → 自动构建并在 Release 挂上：3 个 ABI 的 APK、`BenBrowser-windows-x64.zip` · *Tagging builds and attaches: 3 per-ABI APKs and `BenBrowser-windows-x64.zip`*
 
 > CI 里的 `flutter create` 会用模板覆盖 `lib/main.dart`，还会生成引用 `MyApp` 的 `test/widget_test.dart`。workflow 已经做了备份还原 + 删除模板测试，本地跑 `tool/bootstrap.sh` 也一样处理。如果你自己改了 workflow，记得保留这两步，否则打出来的包会是计数器 demo。
 > *`flutter create` in CI overwrites `lib/main.dart` from the template and generates `test/widget_test.dart` referencing `MyApp`. The workflow backs up and restores the file and deletes that template test; `tool/bootstrap.sh` does the same locally. If you edit the workflow, keep those two steps or your builds will ship the counter demo.*
@@ -186,8 +217,121 @@ git push -u origin main
 - **系统 WebView** — 本项目不带内核，依赖系统自带的 WebView。老设备或定制 ROM 上如遇白屏，先去应用商店更新「Android System WebView」· *This app bundles no engine and relies on the system WebView. If pages render blank on older devices or custom ROMs, update "Android System WebView" from the Play Store first*
 - **安装 APK** — 需授权「允许安装未知应用」（Android 8.0+ 的硬性要求）· *Requires granting "install unknown apps" (a hard requirement since Android 8.0)*
 - **明文 http** — `usesCleartextTraffic` 已由 `tool/patch_platform.py` 打开 · *Cleartext HTTP is enabled by `tool/patch_platform.py`*
-- **minSdkVersion** — 若低于 21 需自行上调 · *Raise it if it's below 21*
+- **minSdkVersion** — 已由补丁脚本设为 29（Android 10）；插件若要求更高再自行上调 · *Set to 29 (Android 10) by the patch script; raise it further if a plugin demands it*
+- **渲染回退** — 无 Vulkan 的设备自动走 OpenGL ES，无需配置；详见下方章节 · *Devices without Vulkan automatically use OpenGL ES, no configuration needed; see below*
 - **签名** — Release APK 目前用调试密钥签名，能正常安装，但上架 Google Play 需另配 keystore · *Release APKs are signed with the debug key: they install fine, but publishing to Google Play requires your own keystore*
+- **Windows 启动失败** — Win10 未装 WebView2 Runtime 时首次启动会报错，装上即可；Win11 自带 · *Win10 without WebView2 Runtime fails on first launch; Win11 bundles it*
+- **Windows SmartScreen** — 未签名的 exe 会弹警告，选「仍要运行」 · *Unsigned exe triggers a SmartScreen warning; choose "Run anyway"*
+
+---
+
+## 渲染后端与 Android 17 / Rendering & Android 17
+
+### 回退策略：Vulkan 优先，OpenGL ES 兜底
+
+本项目**不再把 Vulkan 设为硬性门槛**。Manifest 里是这样声明的：
+*This project **no longer makes Vulkan a hard gate**. The manifest declares:*
+
+```xml
+<!-- 可选：有就用，没有也能装 -->
+<uses-feature
+    android:name="android.hardware.vulkan.version"
+    android:version="0x00400000"
+    android:required="false" />
+
+<!-- 必选：保证设备至少能 GPU 渲染 -->
+<uses-feature android:glEsVersion="0x00030000" android:required="true" />
+```
+
+**没有 Vulkan 的设备照样能装，装上就走 OpenGL ES。**
+*Devices without Vulkan install fine and run on OpenGL ES.*
+
+关键点：**这个回退不需要你写任何代码。** 自 Flutter 3.29 起，没有可用 Vulkan
+驱动的设备会自动回退到 Impeller 的 OpenGL ES 后端；官方原话是
+「No action on your part is necessary for this fallback behavior」。
+*Key point: **this fallback needs no code.** Since Flutter 3.29, devices without a working Vulkan driver fall back to Impeller's OpenGL ES backend automatically — "No action on your part is necessary".*
+
+### 一条容易误解的细节
+
+Manifest 里声明的是 Vulkan ≥ **1.0**，但 Flutter 引擎走 Vulkan 分支的条件其实是
+**Vulkan ≥ 1.1**（外加若干必需扩展和运行时校验）。所以：
+*The manifest declares Vulkan ≥ **1.0**, but Flutter's engine only takes the Vulkan path when the device reports **Vulkan ≥ 1.1** (plus required extensions and runtime checks). Therefore:*
+
+- 报 1.1 / 1.2 / 1.3 / 1.4 的设备 → 走 **Vulkan**
+- 报 1.0 的设备 → 虽然满足 Manifest，引擎仍会回退到 **OpenGL ES**
+- 完全没有 Vulkan 驱动的设备 → 回退到 **OpenGL ES**
+
+这不是 bug，只是声明门槛与引擎门槛不一致。想让声明更贴近实际，可以把
+`VULKAN_MIN_VERSION` 提到 1.1（不影响能不能装，只是提示更准确）。
+*Not a bug — just a mismatch between the declared floor and the engine's floor. To align them, raise `VULKAN_MIN_VERSION` to 1.1 (doesn't affect installability, only makes the hint more accurate).*
+
+### Android 17（API 37）支持
+
+Android 17 = **API 37**，代号 Cinnamon Bun，2026 年 6 月 16 日发布。
+补丁脚本会自动对齐：
+*Android 17 = **API 37**, codename Cinnamon Bun, released June 16, 2026. The patch script aligns:*
+
+| 项 Field | 值 Value | 说明 Why |
+| --- | --- | --- |
+| `compileSdk` | 37 | 才能用到 Android 17 的新 API · *to access Android 17 APIs* |
+| `targetSdk` | 37 | 声明已适配 Android 17 的行为变更 · *opt into Android 17 behavior changes* |
+| `minSdk` | **29** | Android 10 起 · *Android 10 and up* |
+| `ndkVersion` | r28+ | 16KB 内存分页对齐的最低要求 · *minimum for 16KB page alignment* |
+
+**关于 `flutter.xxxVersion` 变量**：官方建议沿用 Flutter SDK 提供的这些变量，
+避免 AGP / Gradle 版本打架。但 Flutter 的 `flutter.compileSdkVersion` 通常
+落后于最新 Android——要真正 target 到 37 就必须覆盖。所以脚本**默认强制覆盖**
+成字面量；想回到「跟随 Flutter」模式：
+
+```bash
+ANDROID_KEEP_FLUTTER_SDK=true python3 tool/patch_platform.py
+```
+*The official guidance is to keep Flutter's `flutter.xxxVersion` variables, but `flutter.compileSdkVersion` typically lags the newest Android — reaching API 37 requires overriding it. The script **overrides by default**; to opt back out, set `ANDROID_KEEP_FLUTTER_SDK=true`.*
+
+覆盖成字面量的代价是：**构建环境必须装好 Android SDK Platform 37**，否则 Gradle
+会报 `failed to find target`。CI 里已加了补装步骤（失败不中断）。
+*The cost of pinning a literal is that **Android SDK Platform 37 must be installed** or Gradle fails with `failed to find target`. CI installs it (non-fatal if unavailable).*
+
+#### 为什么 minSdk 定在 29（Android 10）
+
+- Android 10 起，64 位设备**强制**要求 Vulkan 1.1 驱动，图形能力有保障
+- 覆盖了绝大多数在用设备，同时避开了 Android 7–9 那批驱动质量参差的机型
+- Android 10 也是 scoped storage 的分界线，存储行为更可预测
+
+*Android 10 is where 64-bit devices **must** ship a Vulkan 1.1 driver, where the installed base is still broad, and where scoped storage begins — it skips the Android 7–9 generation with inconsistent driver quality.*
+
+#### targetSdk 37 需要注意的行为变更
+
+target 到 Android 17 会启用下面这些变更，浏览器类应用主要受前两条影响：
+
+| 变更 Change | 影响 Impact |
+| --- | --- |
+| 大屏强制自适应 UI | 平板 / 折叠屏上 `screenOrientation`、`resizeableActivity=false` 等**被系统忽略**，必须适配任意窗口尺寸 · *on large screens (`sw > 600dp`) the system **ignores** orientation/resizability restrictions* |
+| 默认开启证书透明度（CT） | 访问用内网/自签证书的站点可能失败，需在网络安全配置里显式放行 · *Certificate Transparency is on by default; private-CA sites may fail unless opted out* |
+| `usesCleartextTraffic` 已废弃 | 仍可用，但官方建议改用网络安全配置文件 · *still works, but Google recommends a network security config* |
+| Keystore 密钥上限降到 5 万 | 本项目不用 Keystore，无影响 · *unused here* |
+| 应用内存上限 | 所有应用生效（与 targetSdk 无关），WebView 重度页面需留意 · *applies to all apps regardless of targetSdk* |
+
+> Google Play 会在 **2027 年 8 月**起强制要求 `targetSdk = 37`，提前对齐省得后面赶。
+> *Google Play will **require `targetSdk = 37` from August 2027** — aligning now avoids a rush later.*
+> ***The script won't overwrite `flutter.xxxVersion` variables.** Flutter recommends using the SDK-provided variables; hardcoding invites AGP / Gradle / Kotlin conflicts. The script only bumps values that are hardcoded and too low.*
+
+### 关于 Google Play 的两个期限（仅上架时才在意）
+
+本项目走 GitHub Releases 分发，下面这些**不影响你**。只有上架 Play 才需要留意：
+*This project ships via GitHub Releases, so the following **doesn't affect you**. Only relevant if you publish to Play:*
+
+- **targetSdk 必须 ≥ 36**：2026-08-31 起的新应用与更新（可申请延期到 11-01）
+- **16KB 内存分页**：面向 Android 15+ 的应用必须支持；2027-02-01 起不支持的更新无法发布
+
+### 想改回「只装 Vulkan 设备」
+
+```bash
+VULKAN_REQUIRED=true python3 tool/patch_platform.py
+```
+
+代价是会排除约 15% 的设备（多是 Android 7–9 老机型）。
+*The cost: it excludes roughly 15% of devices (mostly Android 7–9 handsets).*
 
 ---
 
