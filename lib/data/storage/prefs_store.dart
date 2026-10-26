@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 极简键值存储：所有数据以 JSON 字符串形式存在 SharedPreferences 中。
-/// 三端（Android / Windows / macOS）行为一致，无需额外原生权限。
+/// 两端（Android / Windows）行为一致，无需额外原生权限。
 class PrefsStore {
   PrefsStore._(this._prefs);
 
