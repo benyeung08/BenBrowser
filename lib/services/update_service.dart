@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/platform_info.dart';
 import '../data/models/release_info.dart';
 
 /// 语义化版本比较：a > b 返回正数，相等 0，a < b 负数。
@@ -30,7 +31,7 @@ int compareVersion(String a, String b) {
 /// 应用内更新：读取 GitHub 最新 Release 并按平台处理。
 ///
 /// - Android：下载 APK 后用系统安装器打开（无需存储权限，落在应用目录）
-/// - Windows / macOS：直接跳浏览器下载（桌面端没有统一的静默安装途径）
+/// - Windows：直接跳浏览器下载（桌面端没有统一的静默安装途径）
 class UpdateService {
   UpdateService(this._dio);
 
@@ -115,22 +116,35 @@ class UpdateService {
     }
   }
 
-  /// 从 Release 附件里挑当前设备可用的 APK。
-  /// CI 用 `--split-per-abi` 会产出三个包，这里优先 arm64（现代机型通用）。
+  /// 按当前平台挑选合适的安装包
   ReleaseAsset? pickAsset(ReleaseInfo release) {
     final assets = release.assets;
     if (assets.isEmpty) return null;
 
-    for (final a in assets) {
-      if (a.isApk && a.name.contains('arm64')) return a;
+    switch (hostPlatform) {
+      case HostPlatform.android:
+        // --split-per-abi 会产出三个 APK，优先 arm64（现代机型通用）
+        for (final a in assets) {
+          if (a.isApk && a.name.contains('arm64')) return a;
+        }
+        for (final a in assets) {
+          if (a.isApk) return a;
+        }
+        return null;
+      case HostPlatform.windows:
+        for (final a in assets) {
+          if (a.isZip && a.name.toLowerCase().contains('windows')) return a;
+        }
+        return null;
+      default:
+        return null;
     }
-    for (final a in assets) {
-      if (a.isApk) return a;
-    }
-    return null;
   }
 
-  /// 兜底：用系统浏览器打开下载页
+  /// Android 可以在应用内下载并安装；桌面端没有静默安装途径，只能跳浏览器
+  bool get canInstallInApp => hostPlatform == HostPlatform.android;
+
+  /// 桌面端 / 兜底：用系统浏览器打开下载页
   Future<bool> openInBrowser(String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) return false;
