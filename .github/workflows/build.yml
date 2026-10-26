@@ -115,8 +115,16 @@ jobs:
           flutter create --org com.ben --project-name ben_browser --platforms=windows .
           cp "$RUNNER_TEMP/main.dart.bak" lib/main.dart
           rm -f test/widget_test.dart
+      # Windows runner 预装的是 `python`，没有 `python3` 这个别名，
+      # 直接写 python3 会报 command not found。这里做一次兼容检测。
       - name: 打补丁
-        run: python3 tool/patch_platform.py
+        shell: bash
+        run: |
+          if command -v python3 >/dev/null 2>&1; then
+            python3 tool/patch_platform.py
+          else
+            python tool/patch_platform.py
+          fi
       - run: flutter pub get
 
       - name: 构建 Windows 桌面版
