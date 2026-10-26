@@ -9,7 +9,6 @@ import '../../data/models/download_task.dart';
 import '../../data/models/release_info.dart';
 import '../../features/downloads/downloads_page.dart';
 import '../../services/desktop_update.dart';
-import '../../services/update_service.dart';
 import '../../state/downloads_controller.dart';
 import '../../state/providers.dart';
 
