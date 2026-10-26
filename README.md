@@ -289,8 +289,18 @@ ANDROID_KEEP_FLUTTER_SDK=true python3 tool/patch_platform.py
 *The official guidance is to keep Flutter's `flutter.xxxVersion` variables, but `flutter.compileSdkVersion` typically lags the newest Android — reaching API 37 requires overriding it. The script **overrides by default**; to opt back out, set `ANDROID_KEEP_FLUTTER_SDK=true`.*
 
 覆盖成字面量的代价是：**构建环境必须装好 Android SDK Platform 37**，否则 Gradle
-会报 `failed to find target`。CI 里已加了补装步骤（失败不中断）。
-*The cost of pinning a literal is that **Android SDK Platform 37 must be installed** or Gradle fails with `failed to find target`. CI installs it (non-fatal if unavailable).*
+会报 `failed to find target`。
+
+CI 里会先更新 `sdkmanager` 再安装 `platforms;android-37`，装不上就**直接失败**，
+不会悄悄降级——因为降级后打出来的包并不是真正的 Android 17 目标，那等于假的。
+若 runner 暂时提供不了 37，可在 workflow 的 android job 里临时加：
+
+```yaml
+env:
+  ANDROID_TARGET_SDK: 36
+```
+*CI updates `sdkmanager` then installs `platforms;android-37`, and **fails hard** if unavailable — silently downgrading would produce a package that isn't really targeting Android 17. If the runner can't provide 37 yet, temporarily add `ANDROID_TARGET_SDK: 36` to the android job's `env`.*
+*The cost of pinning a literal is that **Android SDK Platform 37 must be installed** or Gradle fails with `failed to find target`. CI installs it and **fails hard** if it's unavailable, rather than silently downgrading.*
 
 #### 为什么 minSdk 定在 29（Android 10）
 
@@ -308,7 +318,7 @@ target 到 Android 17 会启用下面这些变更，浏览器类应用主要受�
 | --- | --- |
 | 大屏强制自适应 UI | 平板 / 折叠屏上 `screenOrientation`、`resizeableActivity=false` 等**被系统忽略**，必须适配任意窗口尺寸 · *on large screens (`sw > 600dp`) the system **ignores** orientation/resizability restrictions* |
 | 默认开启证书透明度（CT） | 访问用内网/自签证书的站点可能失败，需在网络安全配置里显式放行 · *Certificate Transparency is on by default; private-CA sites may fail unless opted out* |
-| `usesCleartextTraffic` 已废弃 | 仍可用，但官方建议改用网络安全配置文件 · *still works, but Google recommends a network security config* |
+| `usesCleartextTraffic` 已废弃 | 本项目已迁移到 `res/xml/network_security_config.xml`（明文放行 + 信任用户 CA），该属性与新配置并存、以配置为准 · *migrated to `res/xml/network_security_config.xml`; both coexist and the config wins* |
 | Keystore 密钥上限降到 5 万 | 本项目不用 Keystore，无影响 · *unused here* |
 | 应用内存上限 | 所有应用生效（与 targetSdk 无关），WebView 重度页面需留意 · *applies to all apps regardless of targetSdk* |
 
