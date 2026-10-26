@@ -415,6 +415,93 @@ def _patch_gradle() -> None:
         log(f"android: {os.path.basename(path)} updated")
 
 
+# ------------------------------------------------- 第三方插件兼容补丁
+
+
+def _pub_cache_roots() -> list[str]:
+    """可能的 pub-cache 位置。CI 与本地不同，逐个试。"""
+    roots = []
+    env = os.environ.get("PUB_CACHE", "").strip()
+    if env:
+        roots.append(os.path.join(env, "hosted", "pub.dev"))
+        roots.append(env)
+    home = os.path.expanduser("~")
+    for base in (home, os.path.join(home, ".pub-cache")):
+        roots.append(os.path.join(base, ".pub-cache", "hosted", "pub.dev"))
+    # Flutter SDK 自带缓存的可能位置
+    for flutter_root in (os.environ.get("FLUTTER_ROOT", ""),):
+        if flutter_root:
+            roots.append(os.path.join(flutter_root, ".pub-cache", "hosted", "pub.dev"))
+    return [r for r in roots if r]
+
+
+def patch_plugin_proguard() -> None:
+    """修补插件里已被 AGP 移除的 ProGuard 写法。
+
+    典型报错（flutter_inappwebview_android 1.1.3 会触发）：
+
+        getDefaultProguardFile('proguard-android.txt') is no longer supported
+        since it includes -dontoptimize, which prevents R8 from performing
+        many optimizations.
+
+    新版 AGP 删掉了 proguard-android.txt，只允许 -optimize 变体。
+    插件在 pub-cache 里、路径每次可能变，所以遍历整个缓存目录，
+    把所有插件的 android/build.gradle 一起修掉（不止 inappwebview，
+    别的插件出同样问题时也一并覆盖）。
+
+    必须在 `flutter pub get` 之后执行，否则缓存里还没有插件。
+    """
+    replaced: list[str] = []
+    seen: set[str] = set()
+
+    for base in _pub_cache_roots():
+        real = os.path.realpath(base)
+        if real in seen:
+            continue
+        seen.add(real)
+        if not os.path.isdir(base):
+            continue
+        try:
+            entries = sorted(os.listdir(base))
+        except OSError:
+            continue
+        for name in entries:
+            pkg_dir = os.path.join(base, name)
+            if not os.path.isdir(pkg_dir):
+                continue
+            gradle = os.path.join(pkg_dir, "android", "build.gradle")
+            if not os.path.isfile(gradle):
+                continue
+            try:
+                with open(gradle, "r", encoding="utf-8") as fh:
+                    text = fh.read()
+            except OSError:
+                continue
+            if "proguard-android.txt" not in text:
+                continue
+            new = text.replace(
+                "getDefaultProguardFile('proguard-android.txt')",
+                "getDefaultProguardFile('proguard-android-optimize.txt')",
+            ).replace(
+                'getDefaultProguardFile("proguard-android.txt")',
+                'getDefaultProguardFile("proguard-android-optimize.txt")',
+            )
+            if new == text:
+                continue
+            try:
+                with open(gradle, "w", encoding="utf-8") as fh:
+                    fh.write(new)
+                replaced.append(name)
+            except OSError as exc:
+                log(f"!! 无法写入 {name}: {exc}")
+
+    if replaced:
+        for name in replaced:
+            log(f"plugin: {name} proguard-android -> -optimize")
+    else:
+        log("plugin: 无需修补（可能尚未 pub get，或插件已自行修复）")
+
+
 # ------------------------------------------------------------------ 桌面端
 
 
@@ -435,7 +522,7 @@ def main() -> int:
     # 补丁是「锦上添花」：任何一步出错都不应该让构建挂掉。
     # 万一某个平台的目录结构和预期不同，宁可跳过也别中断流水线——
     # 否则排查时会被这个非致命错误误导，看不到真正的构建报错。
-    for fn in (patch_android, patch_windows):
+    for fn in (patch_android, patch_windows, patch_plugin_proguard):
         try:
             fn()
         except Exception as exc:  # noqa: BLE001
