@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# 生成 Android 原生壳（android/ 目录不进版本库）。
-# 用法： ./tool/bootstrap.sh
+# 生成各平台原生壳（android/windows），这些目录不进版本库。
+# 用法：
+#   ./tool/bootstrap.sh
+#   PLATFORMS=android ./tool/bootstrap.sh
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 ORG="${ORG:-com.ben}"
-PLATFORMS="android"
+PLATFORMS="${PLATFORMS:-android,windows}"
 PROJECT_NAME="ben_browser"
 
 echo "==> 使用 org: $ORG  平台: $PLATFORMS"
@@ -17,6 +19,7 @@ if [ -f lib/main.dart ]; then
   cp lib/main.dart "$BACKUP/main.dart"
 fi
 
+flutter config --enable-windows-desktop || true
 flutter create --org "$ORG" --project-name "$PROJECT_NAME" --platforms="$PLATFORMS" .
 
 if [ -f "$BACKUP/main.dart" ]; then
@@ -29,4 +32,4 @@ rm -f test/widget_test.dart
 flutter pub get
 python3 tool/patch_platform.py
 
-echo "==> 完成。运行 flutter devices 查看设备，再 flutter run -d <设备 id>"
+echo "==> 完成。运行 flutter run -d windows / -d <android 设备 id>"

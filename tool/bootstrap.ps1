@@ -1,13 +1,15 @@
-# 生成 Android 原生壳（Windows 端用 PowerShell 跑）
+# 生成各平台原生壳（Windows 端用 PowerShell 跑）
 # 用法： .\tool\bootstrap.ps1
 param(
     [string]$Org = "com.ben",
-    [string]$Platforms = "android"
+    [string]$Platforms = "android,windows"
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+
+flutter config --enable-windows-desktop
 
 $backup = Join-Path $env:TEMP "benbrowser_main.dart.bak"
 if (Test-Path "lib\main.dart") {
@@ -27,7 +29,7 @@ if (Test-Path "test\widget_test.dart") {
 
 flutter pub get
 
-# Windows 端没有 android/macos 目录时，补丁脚本自动跳过
+# Windows 端没有 android 目录时，补丁脚本自动跳过
 python tool/patch_platform.py
 
 Write-Host "==> 完成。flutter run -d windows 即可调试"
