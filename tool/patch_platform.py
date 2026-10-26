@@ -558,11 +558,65 @@ def patch_windows() -> None:
     log("windows: 产物目录 build/windows/x64/runner/Release（默认，无需改动）")
 
 
+# flutter_inappwebview_windows 用了 <experimental/coroutine>，
+# 新版 MSVC（14.5x / VS 2026）已把它标为废弃并默认报 error：
+#   error C2338: static assertion failed: 'error STL1011: The /await
+#   compiler option, <experimental/coroutine> ... will be REMOVED SOON.'
+# 官方给的临时开关就是这个宏。插件不改，我们只能从编译选项绕过去。
+_COROUTINE_DEFINE = "_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
+
+
+def patch_windows_coroutine() -> None:
+    """给 Windows 构建加上 coroutine 废弃静默宏。
+
+    用 CMAKE_CXX_FLAGS 而不是 add_compile_definitions：前者在生成阶段
+    统一生效，能覆盖到 plugins/ 下那些后加入的子目录目标（插件正是
+    报错所在）；后者只对「之后定义的目标」起作用，覆盖不全。
+    """
+    cmake = os.path.join(ROOT, "windows", "CMakeLists.txt")
+    if not os.path.isfile(cmake):
+        log("skip windows coroutine (CMakeLists.txt not found)")
+        return
+
+    with open(cmake, "r", encoding="utf-8") as fh:
+        text = fh.read()
+
+    if _COROUTINE_DEFINE in text:
+        log(f"windows: {_COROUTINE_DEFINE} 已存在，跳过")
+        return
+
+    line = f'set(CMAKE_CXX_FLAGS "${{CMAKE_CXX_FLAGS}} /D{_COROUTINE_DEFINE}")'
+    block = (
+        "\n# 兼容新版 MSVC：flutter_inappwebview_windows 仍在使用已废弃的\n"
+        "# <experimental/coroutine>，MSVC 14.5x 起默认报 error C2338。\n"
+        "# 用 CMAKE_CXX_FLAGS 以便覆盖 plugins/ 下的子目录目标。\n"
+        f"{line}\n"
+    )
+
+    # 尽量放在 project() 之后，语义最清晰；找不到就追加到末尾
+    match = re.search(r"^\s*project\s*\([^)]*\)[^\n]*\n", text, re.M | re.S)
+    if match:
+        idx = match.end()
+        new_text = text[:idx] + block + text[idx:]
+        log(f"windows: + {_COROUTINE_DEFINE}（插入 project() 之后）")
+    else:
+        new_text = text.rstrip() + "\n" + block
+        log(f"windows: + {_COROUTINE_DEFINE}（追加到末尾）")
+
+    with open(cmake, "w", encoding="utf-8") as fh:
+        fh.write(new_text)
+
+
 def main() -> int:
     # 补丁是「锦上添花」：任何一步出错都不应该让构建挂掉。
     # 万一某个平台的目录结构和预期不同，宁可跳过也别中断流水线——
     # 否则排查时会被这个非致命错误误导，看不到真正的构建报错。
-    for fn in (patch_android, patch_windows, patch_plugin_proguard):
+    for fn in (
+        patch_android,
+        patch_windows,
+        patch_windows_coroutine,
+        patch_plugin_proguard,
+    ):
         try:
             fn()
         except Exception as exc:  # noqa: BLE001
