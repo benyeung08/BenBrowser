@@ -8,6 +8,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 构建开关：某个平台在 CI 上调不通时，把这里改成 'false' 即可单独跳过，
+# 不用删整段 job，也不用改代码。改回 'true' 就恢复。
+env:
+  BUILD_ANDROID: 'true'
+  BUILD_WINDOWS: 'true'
+
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
@@ -44,6 +50,7 @@ jobs:
   android:
     name: android
     needs: verify
+    if: env.BUILD_ANDROID == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,25 +73,40 @@ jobs:
           "$SDKMGR" --update 2>&1 | tail -3 || true
           yes | "$SDKMGR" --licenses >/dev/null 2>&1 || true
           "$SDKMGR" --install "platforms;android-37" 2>&1 | tail -5 || true
-          "$SDKMGR" --install "build-tools;37.0.0" 2>&1 | tail -3 || true
+          # 刻意不安装 build-tools：版本随 AGP 要求自动准备，
+          # 手动指定 37.0.0 若装一半失败会留下损坏目录，反而让构建报
+          # "Installed Build Tools is corrupted"。交给 AGP 自己下载最稳。
+
           echo "runner 已安装的 platform："
           ls "$ANDROID_HOME/platforms" || true
 
           AVAIL=$(ls "$ANDROID_HOME/platforms" 2>/dev/null \
             | grep -oE 'android-[0-9]+' | cut -d- -f2 | sort -n | tail -1)
-          echo "检测到可用最高 SDK：$AVAIL"
+          echo "检测到可用最高 SDK：${AVAIL:-未检测到}"
 
           if [ -n "$AVAIL" ] && [ "$AVAIL" -ge 37 ]; then
             echo "ANDROID_COMPILE_SDK=37" >> "$GITHUB_ENV"
             echo "ANDROID_TARGET_SDK=37" >> "$GITHUB_ENV"
             echo "::notice::以 Android 17（API 37）为目标构建"
-          else
-            FALLBACK="${AVAIL:-36}"
-            echo "ANDROID_COMPILE_SDK=$FALLBACK" >> "$GITHUB_ENV"
-            echo "ANDROID_TARGET_SDK=$FALLBACK" >> "$GITHUB_ENV"
-            echo "::warning::runner 无 Android SDK 37，本次以 API $FALLBACK 构建"
+          elif [ -n "$AVAIL" ]; then
+            echo "ANDROID_COMPILE_SDK=$AVAIL" >> "$GITHUB_ENV"
+            echo "ANDROID_TARGET_SDK=$AVAIL" >> "$GITHUB_ENV"
+            echo "::warning::runner 无 Android SDK 37，本次以 API $AVAIL 构建"
             echo "::warning::等 runner 提供 platforms;android-37 后会自动切回 Android 17"
+          else
+            # 完全探测不到就别硬改，沿用 Flutter 自带变量，至少包能出来
+            echo "ANDROID_KEEP_FLUTTER_SDK=true" >> "$GITHUB_ENV"
+            echo "::warning::未探测到任何 platform，沿用 Flutter 默认 SDK 版本"
           fi
+
+      # flutter create 会用模板覆盖 lib/main.dart，并生成引用 MyApp 的
+      # test/widget_test.dart，两者都会让打包结果变成计数器 demo，必须还原
+      # 先打印环境，构建出问题时可以直接对照版本
+      - name: 打印环境
+        run: |
+          flutter --version
+          java -version 2>&1 | head -1
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
       # flutter create 会用模板覆盖 lib/main.dart，并生成引用 MyApp 的
       # test/widget_test.dart，两者都会让打包结果变成计数器 demo，必须还原
@@ -98,8 +120,18 @@ jobs:
         run: python3 tool/patch_platform.py
       - run: flutter pub get
 
+      # 日志落盘：pipefail 保证 build 的失败码不被 tee 吃掉
       - name: 构建 APK（按 ABI 拆分）
-        run: flutter build apk --release --split-per-abi
+        run: |
+          set -o pipefail
+          flutter build apk --release --split-per-abi 2>&1 | tee android-build.log
+      - name: 上传 android 构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-log
+          path: android-build.log
+          if-no-files-found: ignore
 
       - name: 校验 APK 产物
         run: |
@@ -133,6 +165,7 @@ jobs:
   windows:
     name: windows
     needs: verify
+    if: env.BUILD_WINDOWS == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -166,7 +199,17 @@ jobs:
       - run: flutter pub get
 
       - name: 构建 Windows 桌面版
-        run: flutter build windows --release
+        shell: bash
+        run: |
+          set -o pipefail
+          flutter build windows --release 2>&1 | tee windows-build.log
+      - name: 上传 windows 构建日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-log
+          path: windows-build.log
+          if-no-files-found: ignore
 
       - name: 校验构建产物
         shell: bash
