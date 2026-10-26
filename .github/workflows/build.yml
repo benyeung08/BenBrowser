@@ -119,7 +119,16 @@ jobs:
           flutter create --org com.ben --project-name ben_browser --platforms=android .
           cp "$RUNNER_TEMP/main.dart.bak" lib/main.dart
           rm -f test/widget_test.dart
-      - name: 打补丁（http 明文 / 网络权限）
+      - name: 打补丁（SDK 版本 / 权限 / 明文流量）
+        run: python3 tool/patch_platform.py
+
+      - run: flutter pub get
+
+      # 必须在 pub get 之后：插件这时才下载到 pub-cache，才找得到它的 build.gradle。
+      # flutter_inappwebview_android 1.1.3 用了已被 AGP 移除的
+      # getDefaultProguardFile('proguard-android.txt')，不修的话 release 构建
+      # 做 R8 混淆时会直接失败。脚本幂等，重复执行无副作用。
+      - name: 修补第三方插件（ProGuard 兼容性）
         run: python3 tool/patch_platform.py
 
       # 直接把生效值打进日志，构建出问题时一眼能看出是不是 SDK 版本不对
@@ -130,7 +139,9 @@ jobs:
           echo "--- AndroidManifest 关键项 ---"
           grep -oE 'android:(usesCleartextTraffic|networkSecurityConfig|hardwareAccelerated)="[^"]*"' \
             android/app/src/main/AndroidManifest.xml || true
-      - run: flutter pub get
+          echo "--- 插件 proguard 配置 ---"
+          grep -rn "getDefaultProguardFile" \
+            "$HOME/.pub-cache/hosted/pub.dev"/flutter_inappwebview_android-*/android/build.gradle 2>/dev/null || true
 
       # 日志落盘：pipefail 保证 build 的失败码不被 tee 吃掉
       - name: 构建 APK（按 ABI 拆分）
@@ -211,6 +222,21 @@ jobs:
           fi
       - run: flutter pub get
 
+      # 同上：pub get 之后再跑一次，确保插件补丁也应用到 Windows 构建
+      - name: 修补第三方插件
+        shell: bash
+        run: |
+          if command -v python3 >/dev/null 2>&1; then
+            python3 tool/patch_platform.py
+          else
+            python tool/patch_platform.py
+          fi
+
+      # 工具链诊断：MSVC / CMake / Windows SDK 缺任何一个都会让构建失败
+      - name: 诊断工具链
+        shell: bash
+        run: flutter doctor -v
+
       - name: 构建 Windows 桌面版
         shell: bash
         run: |
@@ -224,35 +250,55 @@ jobs:
           path: windows-build.log
           if-no-files-found: ignore
 
-      - name: 校验构建产物
+      - name: 定位并校验构建产物
         shell: bash
         run: |
           echo "Flutter 版本："
           flutter --version
-          DIR="build/windows/x64/runner/Release"
-          if [ ! -d "$DIR" ]; then
-            echo "::error::未找到 $DIR，Windows 构建失败"
+
+          # Flutter 各版本的输出路径不一样：新版带架构目录
+          # (build/windows/x64/runner/Release)，旧版没有 (build/windows/runner/Release)。
+          # 写死任何一个都可能在别的版本上失败，所以动态探测：找含 .exe 的 Release 目录。
+          REL=""
+          CANDIDATES="build/windows/x64/runner/Release build/windows/runner/Release"
+          CANDIDATES="$CANDIDATES $(find build/windows -maxdepth 4 -type d -name Release 2>/dev/null | sort)"
+          for d in $CANDIDATES; do
+            [ -d "$d" ] || continue
+            if ls "$d"/*.exe >/dev/null 2>&1; then REL="$d"; break; fi
+          done
+
+          if [ -z "$REL" ]; then
+            echo "::error::未找到含 exe 的 Windows Release 目录"
             echo "build 目录实际内容："
-            find build -maxdepth 4 -type d 2>/dev/null | head -20 || true
+            find build -maxdepth 6 -type d 2>/dev/null | head -40 || true
+            echo "build 下所有 exe："
+            find build -name "*.exe" 2>/dev/null | head -10 || true
             exit 1
           fi
-          echo "Release 目录内容："
-          ls -l "$DIR"
-          if [ ! -f "$DIR/ben_browser.exe" ]; then
-            echo "::warning::未找到 ben_browser.exe，产物名可能不同"
-            ls "$DIR"/*.exe 2>/dev/null || true
-          fi
+
+          echo "Release 目录：$REL"
+          echo "WIN_REL=$REL" >> "$GITHUB_ENV"
+          ls -l "$REL"
+          echo "exe 清单："
+          ls "$REL"/*.exe
 
       - name: 打包
         shell: pwsh
         run: |
-          $src = "build\windows\x64\runner\Release\*"
-          if (-not (Test-Path "build\windows\x64\runner\Release")) {
-            Write-Error "Release 目录不存在"
+          $rel = $env:WIN_REL
+          if (-not $rel) { $rel = "build/windows/x64/runner/Release" }
+          # 统一成反斜杠，避免 Join-Path / Compress-Archive 在个别版本上解析异常
+          $rel = $rel -replace '/', '\'
+          if (-not (Test-Path $rel)) {
+            Write-Error "Release 目录不存在: $rel"
             exit 1
           }
-          Compress-Archive -Path $src -DestinationPath BenBrowser-windows-x64.zip
-          Get-Item BenBrowser-windows-x64.zip | Select-Object Name, Length
+          Write-Host "打包目录: $rel"
+          Get-ChildItem $rel | Select-Object Name, Length | Format-Table
+          $out = "BenBrowser-windows-x64.zip"
+          if (Test-Path $out) { Remove-Item $out -Force }
+          Compress-Archive -Path (Join-Path $rel '*') -DestinationPath $out
+          Get-Item $out | Select-Object Name, Length
 
       - uses: actions/upload-artifact@v4
         with:
