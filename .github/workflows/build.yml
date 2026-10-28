@@ -49,6 +49,11 @@ jobs:
     # env context，写了会让整个 workflow 文件失效、所有 job 都不执行。
     if: true
     runs-on: ubuntu-latest
+    # 默认 'false'：拿不到 Android SDK 37 就**直接失败**。
+    # 静默降级到 36 会产出一个名义上支持、实际没适配的包——那是假支持。
+    # 确实需要临时出包时改成 'true'（日志会打醒目 warning）。
+    env:
+      ANDROID_ALLOW_SDK_FALLBACK: 'false'
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -59,10 +64,10 @@ jobs:
           distribution: zulu
           java-version: '17'
 
-      # 目标 Android 17（API 37）。先尽力装上 platforms;android-37；
-      # runner 若确实提供不了，就用其最高可用版本继续构建并打出醒目警告。
-      # 直接 exit 1 会让整条流水线挂掉、一个包都出不来，那没有意义——
-      # 降级只影响 targetSdk，minSdk 29 与全部功能都不受影响。
+      # 默认'false'：拿不到 Android SDK 37 就**直接失败**。
+      # 静默降级到 36 会产出一个名义上支持、实际没适配的包——那是假支持。
+      # 确实需要临时出包时，把这里改成 'true'（日志会打醒目 warning）。
+      # 目标 Android 17（API 37）。
       - name: 准备 Android SDK（目标 37 / Android 17）
         run: |
           SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -90,16 +95,18 @@ jobs:
           if [ -n "$AVAIL" ] && [ "$AVAIL" -ge 37 ]; then
             echo "ANDROID_COMPILE_SDK=37" >> "$GITHUB_ENV"
             echo "ANDROID_TARGET_SDK=37" >> "$GITHUB_ENV"
-            echo "::notice::以 Android 17（API 37）为目标构建"
-          elif [ -n "$AVAIL" ]; then
-            echo "ANDROID_COMPILE_SDK=$AVAIL" >> "$GITHUB_ENV"
-            echo "ANDROID_TARGET_SDK=$AVAIL" >> "$GITHUB_ENV"
-            echo "::warning::runner 无 Android SDK 37，本次以 API $AVAIL 构建"
-            echo "::warning::等 runner 提供 platforms;android-37 后会自动切回 Android 17"
+            echo "::notice::以 Android 17（API 37）为目标构建 ✅"
+          elif [ "${ANDROID_ALLOW_SDK_FALLBACK:-false}" = "true" ]; then
+            FALLBACK="${AVAIL:-36}"
+            echo "ANDROID_COMPILE_SDK=$FALLBACK" >> "$GITHUB_ENV"
+            echo "ANDROID_TARGET_SDK=$FALLBACK" >> "$GITHUB_ENV"
+            echo "::warning::已显式允许降级，本次以 API $FALLBACK 构建"
+            echo "::warning::这不是真正的 Android 17 支持，仅供临时出包"
           else
-            # 完全探测不到就别硬改，沿用 Flutter 自带变量，至少包能出来
-            echo "ANDROID_KEEP_FLUTTER_SDK=true" >> "$GITHUB_ENV"
-            echo "::warning::未探测到任何 platform，沿用 Flutter 默认 SDK 版本"
+            echo "::error::runner 上没有 Android SDK 37（android-37/android.jar）"
+            echo "::error::本项目要求真正的 Android 17 支持，不做静默降级"
+            echo "::error::临时出包方案：把 android job 的 ANDROID_ALLOW_SDK_FALLBACK 改成 'true'"
+            exit 1
           fi
 
       # flutter create 会用模板覆盖 lib/main.dart，并生成引用 MyApp 的
