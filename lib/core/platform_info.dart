@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 /// 两端内核与更新方式都有差异：
 /// - Android：系统 WebView，窄屏布局，更新可在应用内安装
 /// - Windows：WebView2（需 Win10 1809+ 与 WebView2 Runtime）
+///
+/// 两端都要求登录后才能浏览，见 [requireLoginToBrowse]。
 enum HostPlatform { android, windows, linux, unknown }
 
 HostPlatform get hostPlatform {
@@ -31,9 +33,14 @@ bool get useCompactLayout => hostPlatform == HostPlatform.android;
 
 /// 是否要求先登录才能浏览。
 ///
-/// 只对 Windows 生效：桌面版偏「个人长期使用」，且书签/设置的云同步
-/// 挂在账号上。Android 是随手打开就用的场景，加登录墙会让体验变重。
+/// Android 与 Windows **都需要**：书签与设置的云同步挂在账号上，
+/// 两个端统一成同一套进入方式，行为更好预期。
 ///
 /// 注意：真正挡住界面时还有一道「云服务是否已配置」的判断，
-/// 见 [LoginGate] —— 没配置的话不能把用户锁死在登录页。
-bool get requireLoginToBrowse => hostPlatform == HostPlatform.windows;
+/// 见 [LoginGate] —— 没配置的话不能把用户锁死在登录页，
+/// 会给出「暂不登录，直接使用」的出口。
+///
+/// 想整体去掉登录墙，把这个 getter 改成 `false` 即可。
+bool get requireLoginToBrowse =>
+    hostPlatform == HostPlatform.android ||
+    hostPlatform == HostPlatform.windows;
