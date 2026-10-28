@@ -5,15 +5,18 @@ import '../../core/constants.dart';
 import '../../state/providers.dart';
 import 'sign_in_form.dart';
 
-/// Windows 版的登录门：未登录时不展示浏览器，只显示登录界面。
+/// 登录门：未登录时不展示浏览器，只显示登录界面。
 ///
-/// **为什么只在 Windows 上这样**：Android 版是随手打开就用，
-/// 强制登录会让体验变重；桌面版使用场景更偏「个人长期」，
-/// 且本项目把书签/设置的云同步挂在账号上。
+/// Android 与 Windows 都会走到这里——书签与设置的云同步挂在账号上，
+/// 两端统一成同一套进入方式。
+///
+/// 文案刻意不写死平台名：同一个组件跑在两个端上，
+/// 不能让 Android 用户看到「Windows 版需要登录」这种话。
 ///
 /// **安全网（重要）**：若 Supabase 还没配置（[AccountService.isReady] 为
 /// false），此时根本登不进去，绝不能把用户锁死在登录页——会显示配置
 /// 引导，并提供「暂不登录，直接使用」的出口。
+/// 这条对两个端都一样重要，否则应用会完全打不开。
 class LoginGate extends ConsumerWidget {
   const LoginGate({super.key, required this.onSkip});
 
@@ -49,7 +52,7 @@ class LoginGate extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Windows 版需要先登录才能使用',
+                    '需要先登录才能使用',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
