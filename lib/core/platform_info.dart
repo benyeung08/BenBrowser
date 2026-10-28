@@ -28,3 +28,12 @@ bool get isAndroidHost => hostPlatform == HostPlatform.android;
 
 /// 手机端屏幕窄，底部工具栏更顺手；Windows 窗口宽，按钮平铺在顶栏即可。
 bool get useCompactLayout => hostPlatform == HostPlatform.android;
+
+/// 是否要求先登录才能浏览。
+///
+/// 只对 Windows 生效：桌面版偏「个人长期使用」，且书签/设置的云同步
+/// 挂在账号上。Android 是随手打开就用的场景，加登录墙会让体验变重。
+///
+/// 注意：真正挡住界面时还有一道「云服务是否已配置」的判断，
+/// 见 [LoginGate] —— 没配置的话不能把用户锁死在登录页。
+bool get requireLoginToBrowse => hostPlatform == HostPlatform.windows;

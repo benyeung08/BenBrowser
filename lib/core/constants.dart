@@ -12,7 +12,7 @@ class AppConstants {
 
   /// 检查更新用的 GitHub 仓库（owner/repo）。
   /// ★ 推送到你自己的仓库后，把这里改成你的，或在设置页里直接改。
-  static const String defaultRepoSlug = 'benyeung08/BenBrowser';
+  static const String defaultRepoSlug = 'OWNER/ben_browser';
 
   /// 仓库为空时的兜底提示
   static const String repoPlaceholder = 'OWNER';
@@ -95,4 +95,47 @@ class UserAgentPreset {
         (e) => e.id == id,
         orElse: () => system,
       );
+}
+
+/// 云端账号与同步（Google / Microsoft 登录 + 书签与设置同步）
+///
+/// 后端用 Supabase：它同时提供 OAuth（Google、Microsoft/Azure）和数据库，
+/// 一个服务同时解决「登录」和「同步」，且 OAuth 的 client id / secret
+/// 都放在 Supabase 后台，不必写进客户端代码。
+///
+/// 启用步骤见 README「账号与云同步」。在填入真实值之前，
+/// [CloudConfig.isConfigured] 为 false，应用不会去连网络，功能整体降级。
+class CloudConfig {
+  CloudConfig._();
+
+  /// Supabase 项目 URL，形如 https://xxxx.supabase.co
+  /// ★ 改成你自己的（或用 --dart-define=SUPABASE_URL=... 注入）
+  static const String supabaseUrl = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: 'YOUR_SUPABASE_URL',
+  );
+
+  /// Supabase publishable key（旧称 anon key）
+  /// ★ 改成你自己的（或用 --dart-define=SUPABASE_PUBLISHABLE_KEY=... 注入）
+  static const String supabasePublishableKey = String.fromEnvironment(
+    'SUPABASE_PUBLISHABLE_KEY',
+    defaultValue: 'YOUR_SUPABASE_PUBLISHABLE_KEY',
+  );
+
+  /// 同步数据存放的表名，需先在 Supabase 建好（建表 SQL 见 README）
+  static const String syncTable = 'benbrowser_sync';
+
+  /// OAuth 回调用的自定义 scheme。Android 需要它在 Manifest 里声明
+  /// intent-filter（由 tool/patch_platform.py 自动注入），且与 Supabase
+  /// 后台的 Redirect URLs 保持一致。
+  static const String redirectScheme = 'com.ben.benbrowser';
+  static const String oauthRedirectUrl = '$redirectScheme://login-callback/';
+
+  /// 还没填真实值就视为「未配置」。
+  /// 用占位符前缀判断，避免把 'YOUR_...' 当成真地址发出请求。
+  static bool get isConfigured {
+    if (supabaseUrl.startsWith('YOUR_')) return false;
+    if (supabasePublishableKey.startsWith('YOUR_')) return false;
+    return Uri.tryParse(supabaseUrl)?.hasScheme == true;
+  }
 }
