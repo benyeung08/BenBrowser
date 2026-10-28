@@ -36,6 +36,84 @@ git tag v0.1.0 && git push --tags
 
 ---
 
+## 账号与云同步 / Account & Cloud Sync
+
+支持 **Google** 与 **Microsoft** 登录，**两个渠道二选一**：登录前先选中要用哪种，再点统一的登录按钮。同一时刻只能登录一个账号，要换另一种需先退出登录。
+*Sign in with **Google** or **Microsoft** — **pick one**. Select the channel first, then press the single sign-in button. Only one account can be signed in at a time; switching requires signing out first.*
+
+UI 上刻意做成单选而非两个并列按钮：避免误点到另一个渠道，也让「只能用其中一个」这件事在点之前就明确。
+*The UI is a radio-style choice rather than two parallel buttons, so you can't mis-tap the wrong channel and the "one at a time" rule is clear before you commit.*
+
+### 两端都要登录 / Sign-in required on both platforms
+
+**Android 与 Windows 都会先显示登录页，登录成功后自动进入浏览器。** 书签与设置的云同步挂在账号上，两端统一成同一套进入方式。
+***Both Android and Windows show the sign-in screen first; the browser opens automatically once signed in.** Bookmark and settings sync is tied to the account, so both platforms share the same entry flow.*
+
+由 `platform_info.dart` 的 `requireLoginToBrowse` 控制，对 `android` 与 `windows` 为真。想整体去掉登录墙，把该 getter 改成 `false` 即可。
+*Controlled by `requireLoginToBrowse` in `platform_info.dart`, true for `android` and `windows`. Set it to `false` to remove the gate entirely.*
+
+**Android 的两个硬性前提**（缺一个就会「点登录没反应」）：
+1. `MainActivity` 必须 `android:launchMode="singleTop"` —— 深链回跳时若新建 Activity 实例，登录结果会落在那个新实例里，用户眼前的界面收不到回调
+2. Manifest 里要有 `com.ben.benbrowser://login-callback/` 的 intent-filter
+
+这两项都由 `tool/patch_platform.py` 自动注入，且与 Supabase 后台的 Redirect URLs 必须一致。
+*Two hard requirements on Android (miss either and "sign in does nothing"): `MainActivity` needs `android:launchMode="singleTop"` — otherwise the deep-link return creates a new Activity and the visible screen never gets the callback — plus an intent-filter for `com.ben.benbrowser://login-callback/`. Both are injected by `tool/patch_platform.py` and must match the Redirect URLs configured in Supabase.*
+
+> **安全网**：若 Supabase 尚未配置，此时根本登不进去，登录页会显示配置引导并提供「**暂不登录，直接使用**」按钮——
+> 否则应用会完全不可用。配置好之后这个出口自然消失。
+> ***Safety net**: if Supabase isn't configured, signing in is impossible, so the gate shows setup instructions plus a "**skip sign-in for now**" button — otherwise the app would be completely unusable. That escape hatch disappears once configured.*
+
+后端用 [Supabase](https://supabase.com)：一个服务同时提供 OAuth 和数据库，
+而且 Google / Microsoft 的 client id 与 secret 都配置在 Supabase 后台，
+**不必写进客户端代码**——客户端只需要项目 URL 和 publishable key。
+*The backend is [Supabase](https://supabase.com): one service for both OAuth and the database. Google / Microsoft client IDs and secrets live in the Supabase dashboard, **not in client code** — the app only needs the project URL and publishable key.*
+
+### 启用步骤 / Setup
+
+1. 建 Supabase 项目，在 **Authentication → Providers** 里启用
+   **Google** 和 **Azure**，各填对应的 client id / secret
+   （Azure 的 callback 填 `https://<项目>.supabase.co/auth/v1/callback`）
+2. Authentication → **URL Configuration** 的 Redirect URLs 加上
+   `com.ben.benbrowser://login-callback/`
+3. SQL Editor 里执行一次建表（含 RLS，保证每人只能读写自己的数据）：
+
+```sql
+create table benbrowser_sync (
+  user_id    text primary key default auth.uid(),
+  payload    jsonb not null,
+  updated_at timestamptz not null default now()
+);
+alter table benbrowser_sync enable row level security;
+create policy "own row" on benbrowser_sync
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+```
+
+4. 把两个值填进 `lib/core/constants.dart` 的 `CloudConfig`
+   （或用 `--dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...` 注入），
+   重新构建即可
+5. Android 的回调深链由 `tool/patch_platform.py` 自动注入，不用手改 Manifest
+
+### 同步范围与策略 / What syncs, and how
+
+| 数据 | 是否同步 | 说明 |
+| --- | --- | --- |
+| 书签 Bookmarks | ✅ 按 id 取并集 | *merged by id (union)* |
+| 设置 Settings | ✅ 较新者胜 | *last write wins* |
+| 历史记录 History | ❌ | 量大且隐私敏感 · *bulky and privacy-sensitive* |
+| 标签页 Tabs | ❌ | 属于会话状态 · *session state* |
+| 下载 Downloads | ❌ | — |
+
+**已知限制**：书签用并集合并，因此**删除操作不会跨设备传播**——
+在一台设备上删掉的书签，同步后会被另一台设备「找回」。
+这是刻意选的：丢书签的代价远大于重复。要支持删除同步需要引入墓碑记录。
+*Known limitation: bookmarks merge as a union, so **deletions don't propagate**. A bookmark deleted on one device can reappear after a sync from another. This is deliberate — losing bookmarks costs far more than duplicates. Proper deletion sync needs tombstones.*
+
+**未配置时的行为**：`CloudConfig.isConfigured` 为 false 时完全不联网，
+设置页显示配置引导，其余功能照常使用，不会崩溃。
+*When unconfigured, nothing hits the network: Settings shows a setup guide and everything else keeps working.*
+
+---
+
 ## 应用内更新 / In-App Updates
 
 基于 GitHub Releases，读 `releases/latest` 比对版本。
@@ -93,9 +171,11 @@ tool/            bootstrap、patch_platform、check、analyze_errors、rename
 
 - **Android 白屏** — 不带内核，依赖系统 WebView。老设备或定制 ROM 先更新「Android System WebView」· *No bundled engine; update "Android System WebView" on blank pages*
 - **Vulkan 非硬性要求** — 没有 Vulkan 驱动的设备自动走 OpenGL ES，Flutter 3.29+ 自动回退，无需配置 · *Devices without Vulkan fall back to OpenGL ES automatically since Flutter 3.29*
-- **Android 17 行为变更** — targetSdk 37 会启用大屏强制自适应 UI、默认开启证书透明度（内网/自签站点可能失败）· *targetSdk 37 enables large-screen adaptive UI enforcement and Certificate Transparency by default*
+- **Android 17 已适配** — 大屏自适应（按窗口宽度布局）、CT 默认开启、局域网/环回新权限均已处理，详见下方专章，需访问内网自签证书站点时按专章加 `[domain-config]` · *Android 17 adapted: window-width layout, CT on by default, new LAN/loopback permissions. See the dedicated section to allow internal self-signed hosts*
 - **签名** — Release APK 用调试密钥，能装但不能上架 Play；Windows exe 未签名会弹 SmartScreen，选「仍要运行」· *Release APK uses the debug key (installs fine, not Play-ready); unsigned exe triggers SmartScreen*
-- **SDK 降级** — runner 若没有 `platforms;android-37` 会自动用最高可用版本构建并打 warning，只影响 targetSdk · *If the runner lacks `platforms;android-37`, the build uses the highest available API with a warning — only `targetSdk` is affected*
+- **不做静默降级** — runner 若没有 `platforms;android-37`，android job **直接失败**并给出提示；要临时出包把该 job 的 `ANDROID_ALLOW_SDK_FALLBACK` 设为 `'true'` · *If the runner lacks `platforms;android-37` the android job **fails outright** with guidance; set `ANDROID_ALLOW_SDK_FALLBACK: 'true'` to ship anyway*
+- **新版 MSVC 编译失败（C++ coroutine）** — `flutter_inappwebview_windows` 仍在用已废弃的 `<experimental/coroutine>`，MSVC 14.5x（VS 2026）起默认报 `error C2338 / STL1011`。`tool/patch_platform.py` 会自动往 `windows/CMakeLists.txt` 注入 `_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS` 绕过，插件修复后可去掉 · *`flutter_inappwebview_windows` still uses deprecated `<experimental/coroutine>`; MSVC 14.5x (VS 2026) errors with `C2338 / STL1011`. The patch script injects `_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS` into `windows/CMakeLists.txt`; drop it once the plugin is fixed*
+- **Windows 控制台编码** — runner 默认 cp1252，脚本输出中文日志会抛 `UnicodeEncodeError` 并让 job 失败。补丁脚本已强制 UTF-8，workflow 也设了 `PYTHONIOENCODING` · *The runner defaults to cp1252 and Chinese log output throws `UnicodeEncodeError`, failing the job. The script forces UTF-8 and the workflow sets `PYTHONIOENCODING`*
 - **第三方插件 ProGuard 补丁** — `flutter_inappwebview_android` 1.1.3 用了已被新版 AGP 移除的 `getDefaultProguardFile('proguard-android.txt')`，release 构建做 R8 混淆时会直接失败。`tool/patch_platform.py` 会遍历 pub-cache 把它换成 `-optimize` 变体（覆盖所有插件，不止这一个）。**必须在 `flutter pub get` 之后执行**，所以 workflow 里分了两步 · *`flutter_inappwebview_android` 1.1.3 calls `getDefaultProguardFile('proguard-android.txt')`, which newer AGP removed and which fails release builds at the R8 step. `tool/patch_platform.py` sweeps the pub-cache and swaps in the `-optimize` variant for every plugin. **Must run after `flutter pub get`**, hence two separate steps in the workflow*
 
 ---
@@ -104,6 +184,60 @@ tool/            bootstrap、patch_platform、check、analyze_errors、rename
 
 广告拦截（本地规则 + 请求过滤）· 标签会话持久化（当前关闭即丢失）· 书签/历史导入导出 · 密码填充 · 阅读模式
 *Ad blocking (local rules + request filtering) · persist tab sessions (currently lost on exit) · bookmark/history import-export · password autofill · reader mode*
+
+---
+
+## Android 17（API 37）支持
+
+Android 17 = **API 37**，代号 Cinnamon Bun。补丁脚本自动对齐编译目标，**并且真正适配了它的行为变更**（不只是把数字改成 37）。
+*Android 17 = **API 37**, codename Cinnamon Bun. The patch script aligns the build target **and actually adapts to its behavior changes** — not just bumping a number.*
+
+| 项 Field | 值 Value |
+| --- | --- |
+| `compileSdk` | 37 |
+| `targetSdk` | 37 |
+| `minSdk` | 29（Android 10） |
+| `ndkVersion` | r28+（16KB 内存分页对齐的最低要求） |
+
+CI 默认**要求 SDK 37 真实存在**，拿不到就直接失败，不做静默降级——降级产出的包名义上支持、实际没适配。临时出包可把 android job 的 `ANDROID_ALLOW_SDK_FALLBACK` 改成 `'true'`。
+*CI **requires SDK 37 to actually exist** and fails hard otherwise — a downgraded build claims support without the adaptations. Set `ANDROID_ALLOW_SDK_FALLBACK: 'true'` on the android job to temporarily ship anyway.*
+
+### 已适配的行为变更 / Adapted behavior changes
+
+**1. 大屏自适应（无退路）** — sw ≥ 600dp 时系统会**直接忽略** `screenOrientation`、`resizeableActivity`、`minAspectRatio`、`maxAspectRatio` 与 `setRequestedOrientation()`。Android 16 还有临时 opt-out，**Android 17 已移除**。
+*On sw ≥ 600dp the system **ignores** orientation/resizability/aspect-ratio restrictions. Android 16's temporary opt-out is **removed in 17**.*
+
+应对：补丁脚本删除这些无效声明、显式设 `resizeableActivity=true`、并拒绝 `appCategory=game`（那会被豁免，但等于放弃适配）。布局侧不再按平台判断，改为按**窗口宽度**（`isCompactWindow`，阈值同为 600dp）——平板、折叠屏展开、分屏各自得到合适布局，不会把手机布局拉伸。
+*Handled: the script drops those dead attributes, sets `resizeableActivity=true`, and rejects `appCategory=game`. Layout no longer branches on platform but on **window width** (`isCompactWindow`, same 600dp threshold), so tablets, unfolded foldables, and split-screen each get a sane layout instead of a stretched phone UI.*
+
+**2. 证书透明度（CT）默认开启** — 目标 37 的应用默认校验 CT。配置刻意**不写任何 CT 开关**，让平台默认生效，公网站点获得 CT 保护。
+*CT is on by default for API 37 targets. The config deliberately **declares no CT override** so the platform default applies and public sites get CT protection.*
+
+需要访问内网 / 自签证书站点时，按域名加 `<domain-config>` 并配自定义信任锚即可——官方明确「使用自定义信任锚的连接不做 CT 校验」，因此**不需要**额外的关闭开关。示例写在生成的 `network_security_config.xml` 注释里。
+*For internal/self-signed hosts, add a `<domain-config>` with custom trust anchors — Android skips CT verification for custom-anchor connections, so **no separate opt-out tag is needed**. An example sits in the generated XML comments.*
+
+> 不要把 user CA 放进 `base-config`：那会让所有 HTTPS 连接都走自定义信任锚，等于全局关掉 CT。用户 CA 放在 `debug-overrides`（仅 debug 生效）。
+> *Don't put user CAs in `base-config` — that makes every HTTPS connection use custom anchors and disables CT globally. User CAs belong in `debug-overrides` (debug only).*
+
+**3. 局域网 / 环回访问需要新权限** — Android 17 起访问 `192.168.x.x`（路由器、NAS）需 `ACCESS_LOCAL_NETWORK`；通过 `127.0.0.1` 与其他应用通信需 `USE_LOOPBACK_INTERFACE`。两者补丁脚本都会加，对浏览器是刚需。
+*Android 17 requires `ACCESS_LOCAL_NETWORK` for LAN hosts (routers, NAS) and `USE_LOOPBACK_INTERFACE` for loopback communication. Both are injected — essential for a browser.*
+
+**4. 明文流量改用网络安全配置** — `usesCleartextTraffic` 已废弃，改由 `res/xml/network_security_config.xml` 声明（旧属性保留，与新配置并存时以配置为准）。
+*`usesCleartextTraffic` is deprecated in favor of a network security config (the old attribute remains; the config wins).*
+
+### 仅需知悉（本项目不受影响）/ Notable but N/A here
+
+| 变更 Change | 说明 Note |
+| --- | --- |
+| `System.load()` 的 native 库必须只读 | Flutter 从 APK 的 `nativeLibraryDir` 加载，本身只读，无影响 |
+| 无锁 MessageQueue | 仅影响反射 MessageQueue 私有字段的代码 |
+| `static final` 字段真正不可变 | 反射修改抛异常、JNI 修改崩溃；需关注第三方插件 |
+| Parcel 校验升级为抛异常 | 同样取决于插件 |
+| RemoteViews 内存上限 | 本项目无桌面小组件 |
+| Activity 不再因键盘等配置变更重启 | 对 WebView 反而更好——输入时页面不重建 |
+
+> Google Play 会在 **2027 年 8 月**起强制要求 `targetSdk = 37`。
+> *Google Play will **require `targetSdk = 37` from August 2027**.*
 
 ---
 
