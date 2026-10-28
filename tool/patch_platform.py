@@ -278,6 +278,9 @@ def patch_android() -> None:
             application.set(nsc_attr, "@xml/network_security_config")
             log("android: + networkSecurityConfig=@xml/network_security_config")
 
+        # OAuth 登录回调（Google / Microsoft）
+        _add_oauth_deep_link(application)
+
         # FileProvider：Android 7.0+ 禁止 file:// URI，
         # 不配这段的话「下载并安装」打开 APK 会抛 FileUriExposedException
         authority = "${applicationId}.fileprovider"
@@ -543,6 +546,75 @@ def patch_plugin_proguard() -> None:
 
 
 # ------------------------------------------------------------------ 桌面端
+
+
+def _deep_link_scheme() -> str:
+    """从 lib/core/constants.dart 里读出 OAuth 回调 scheme，避免两处写死。"""
+    const = os.path.join(ROOT, "lib", "core", "constants.dart")
+    if not os.path.isfile(const):
+        return "com.ben.benbrowser"
+    with open(const, "r", encoding="utf-8") as fh:
+        text = fh.read()
+    m = re.search(
+        r"redirectScheme\s*=\s*'([^']+)'", text
+    )
+    return m.group(1) if m else "com.ben.benbrowser"
+
+
+def _add_oauth_deep_link(application: ET.Element) -> None:
+    """Android: OAuth 登录完成后靠深链跳回应用。
+
+    少了这段，Google / Microsoft 登录页结束后会停在浏览器里，
+    应用永远收不到回调，表现为「点登录没反应」。
+    scheme 必须与 Supabase 后台配置的 Redirect URLs 一致。
+    """
+    scheme = _deep_link_scheme()
+
+    for act in application.iter("activity"):
+        if act.get(NAME_ATTR) != ".MainActivity":
+            continue
+        for filt in act.findall("intent-filter"):
+            data = filt.find("data")
+            if data is not None and data.get(f"{{{ANDROID_NS}}}scheme") == scheme:
+                log(f"android: 深链 {scheme} 已存在，跳过")
+                return
+        break
+    else:
+        log("android: 未找到 MainActivity，跳过深链注入")
+        return
+
+    # 重新找一次 MainActivity（上面的 for/else 只对完整遍历生效）
+    main = None
+    for act in application.iter("activity"):
+        if act.get(NAME_ATTR) == ".MainActivity":
+            main = act
+            break
+    if main is None:
+        return
+
+    # 关键：必须是 singleTop。默认 standard 模式下，深链回跳会新建一个
+    # Activity 实例，登录结果落在那个新实例里，用户眼前这个界面收不到
+    # 回调——表现为「点登录没反应」，而登录又是必需的，等于被锁死在登录页。
+    cur_mode = main.get(f"{{{ANDROID_NS}}}launchMode")
+    if cur_mode is None:
+        main.set(f"{{{ANDROID_NS}}}launchMode", "singleTop")
+        log("android: + MainActivity launchMode=singleTop（OAuth 回跳必需）")
+    elif cur_mode != "singleTop":
+        log(f"android:   launchMode 当前为 {cur_mode}，未改动")
+        log("android:   ⚠ 非 singleTop 可能导致 OAuth 回跳收不到回调")
+
+    filt = ET.SubElement(main, "intent-filter")
+    ET.SubElement(
+        filt, "action", {NAME_ATTR: "android.intent.action.VIEW"}
+    )
+    ET.SubElement(filt, "category", {NAME_ATTR: "android.intent.category.DEFAULT"})
+    ET.SubElement(filt, "category", {NAME_ATTR: "android.intent.category.BROWSABLE"})
+    ET.SubElement(
+        filt,
+        "data",
+        {f"{{{ANDROID_NS}}}scheme": scheme, f"{{{ANDROID_NS}}}host": "login-callback"},
+    )
+    log(f"android: + OAuth 回调深链 {scheme}://login-callback")
 
 
 def patch_windows() -> None:
