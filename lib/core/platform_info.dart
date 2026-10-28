@@ -28,8 +28,23 @@ bool get isDesktopHost =>
 
 bool get isAndroidHost => hostPlatform == HostPlatform.android;
 
-/// 手机端屏幕窄，底部工具栏更顺手；Windows 窗口宽，按钮平铺在顶栏即可。
-bool get useCompactLayout => hostPlatform == HostPlatform.android;
+/// 大屏判定阈值（dp），与 Android 平台判定「大屏」的标准一致。
+///
+/// Android 17（API 37）在最小宽度 >= 600dp 的屏幕上会**直接忽略**
+/// `screenOrientation`、`resizeableActivity`、`minAspectRatio`、
+/// `maxAspectRatio` 以及 `setRequestedOrientation()`。
+/// 所以布局必须按窗口实际尺寸来定，而不是按「这是手机还是桌面」。
+const double kLargeScreenDp = 600;
+
+/// 当前窗口是否应按窄屏（手机式）布局渲染。
+///
+/// 传 `MediaQuery.sizeOf(context).shortestSide` 进来即可。
+///
+/// 为什么不直接用平台判断：Android 手机、平板、折叠屏展开、分屏、
+/// 桌面窗口模式都可能给出完全不同的窗口尺寸，同一台设备在不同场景下
+/// 需要不同的布局。按窗口宽度判断才能同时满足这些情况——
+/// 这也正是 Android 17 强制要求的行为。
+bool isCompactWindow(double shortestSideDp) => shortestSideDp < kLargeScreenDp;
 
 /// 是否要求先登录才能浏览。
 ///
