@@ -29,6 +29,10 @@ class BrowserPage extends ConsumerWidget {
 
     final active = tabs.activeTab;
 
+    // Android 17：大屏上系统不再理会方向/尺寸限制，布局只能按窗口宽度定。
+    // 窄窗口（手机竖屏、分屏小窗）用底部工具栏更好按。
+    final compact = isCompactWindow(MediaQuery.sizeOf(context).shortestSide);
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -37,7 +41,7 @@ class BrowserPage extends ConsumerWidget {
             if (active != null) BrowserToolbar(tab: active),
             if (active != null) _ProgressBar(tab: active),
             Expanded(child: _buildBody(ref, tabs)),
-            if (active != null && useCompactLayout) _BottomBar(tab: active),
+            if (active != null && compact) _BottomBar(tab: active),
           ],
         ),
       ),

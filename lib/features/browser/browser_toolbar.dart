@@ -95,7 +95,8 @@ class _BrowserToolbarState extends ConsumerState<BrowserToolbar> {
               tab.isLoading ? BrowserAction.stop : BrowserAction.reload,
             ),
           ),
-          if (!useCompactLayout)
+          // 窗口够宽时把「主页」平铺到顶栏，窄屏靠底部工具栏的按钮
+          if (!isCompactWindow(MediaQuery.sizeOf(context).shortestSide))
             IconButton(
               tooltip: '主页',
               icon: const Icon(Icons.home_outlined),
