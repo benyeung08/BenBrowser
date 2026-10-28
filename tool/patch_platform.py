@@ -246,6 +246,14 @@ def patch_android() -> None:
     # 应用内安装 APK（设置里的「下载并安装」需要）
     wanted = {
         "android.permission.REQUEST_INSTALL_PACKAGES": "应用内更新安装",
+        # Android 17（API 37）起，访问局域网（192.168.x.x 的路由器、NAS、
+        # 家用服务器等）必须显式声明，否则目标 37 的应用一律被拒。
+        # 对浏览器来说这是刚需——访问内网设备是很常见的用法。
+        "android.permission.ACCESS_LOCAL_NETWORK": "Android 17 局域网访问",
+        # Android 17 起，通过环回接口（127.0.0.1 / ::1）与其他应用通信
+        # 不再由 INTERNET 隐式允许。访问本机起的服务（如本地调试站点）
+        # 需要这一条。
+        "android.permission.USE_LOOPBACK_INTERFACE": "Android 17 环回接口访问",
     }
     for perm, desc in wanted.items():
         exists = any(
@@ -259,6 +267,9 @@ def patch_android() -> None:
     # 渲染能力：Vulkan 可选 + OpenGL ES 兜底
     _add_vulkan_feature(root)
     _add_gles_feature(root)
+
+    # Android 17 大屏自适应
+    _apply_android17_adaptive(root)
 
     # 明文流量（http 站点）
     application = root.find("application")
@@ -308,11 +319,65 @@ def patch_android() -> None:
     _patch_gradle()
 
 
+def _apply_android17_adaptive(root: ET.Element) -> None:
+    """Android 17（API 37）大屏自适应：无法再"退出"。
+
+    sw >= 600dp 的屏幕上，系统会**直接忽略**这些声明：
+      - android:screenOrientation（portrait / landscape 等具体值）
+      - android:resizeableActivity
+      - android:minAspectRatio / android:maxAspectRatio
+      - Activity.setRequestedOrientation()
+
+    Android 16 还给了一个临时 opt-out，Android 17 把它彻底移除了——
+    也就是说目标 37 必须真的能适应任意窗口尺寸，没有退路。
+
+    这里做两件事：
+    1. 主动删掉这些限制（留着没用，还会误导后来读代码的人）
+    2. 显式声明 resizeableActivity=true，它在 sw<600dp 的多窗口场景
+       仍然有效，也表明这个项目是"可自适应"的
+    """
+    ignored_attrs = [
+        f"{{{ANDROID_NS}}}screenOrientation",
+        f"{{{ANDROID_NS}}}minAspectRatio",
+        f"{{{ANDROID_NS}}}maxAspectRatio",
+    ]
+    for act in root.iter("activity"):
+        for attr in ignored_attrs:
+            if act.get(attr) is not None:
+                del act.attrib[attr]
+                log(f"android 17: - {attr.split('}')[1]}（大屏上会被系统忽略）")
+
+    application = root.find("application")
+    if application is None:
+        return
+    ra = f"{{{ANDROID_NS}}}resizeableActivity"
+    if application.get(ra) != "true":
+        application.set(ra, "true")
+        log("android 17: + resizeableActivity=true")
+
+    # 不要声明 appCategory=game：那样会被豁免、不用适配大屏，
+    # 但代价是浏览器在大屏/分屏下的体验没人管。我们不是游戏。
+    cat = f"{{{ANDROID_NS}}}appCategory"
+    if application.get(cat) == "game":
+        del application.attrib[cat]
+        log("android 17: - appCategory=game（避免被豁免自适应要求）")
+
+
 def _write_network_security_config() -> None:
     """Android 17 起 android:usesCleartextTraffic 已废弃，
     官方建议改用网络安全配置来声明明文流量放行。
 
-    顺带把用户 CA 也纳入信任锚——访问内网 / 自签证书的站点时会用到。
+    **关于证书透明度（CT）**：Android 17（API 37）对目标 37 的应用
+    **默认开启** CT。这里刻意**不写**任何 CT 开关，让平台默认值生效——
+    对公网站点来说这是更安全的默认行为，也是官方推荐做法。
+
+    要放行内网 / 自签证书站点，正确做法是按域名加 <domain-config>
+    并配自定义信任锚：官方明确说明「使用自定义信任锚的连接不做 CT 校验」，
+    所以加信任锚就自动免除了该域名的 CT，不需要额外的关闭开关。
+    示例写在生成的 XML 注释里。
+
+    注意：不要把 user CA 放进 base-config，那会让**所有** HTTPS 连接
+    都走自定义信任锚，等于全局关掉 CT，是安全倒退。
     """
     xml_dir = os.path.join(ROOT, "android", "app", "src", "main", "res", "xml")
     path = os.path.join(xml_dir, "network_security_config.xml")
@@ -322,18 +387,48 @@ def _write_network_security_config() -> None:
     os.makedirs(xml_dir, exist_ok=True)
     content = """<?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 放行 http 明文站点（对应已废弃的 usesCleartextTraffic） -->
+
+    <!-- 全局默认：放行 http 明文（对应已废弃的 usesCleartextTraffic）。
+         只信任系统 CA，因此 Android 17 的证书透明度(CT)默认开启，
+         公网站点享受 CT 保护。 -->
     <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- 仅对 debuggable 构建生效：方便调试时访问自签 / 内网证书站点。
+         发布包不受影响，不会把用户 CA 暴露到线上。 -->
+    <debug-overrides>
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
         </trust-anchors>
-    </base-config>
+    </debug-overrides>
+
+    <!--
+      需要访问内网 / 自签证书站点时，在下面加一段 domain-config。
+      一旦配置了自定义信任锚，该域名会自动免除 CT 校验（官方行为），
+      无需再写任何 CT 关闭开关。把下面的内容取消注释并改成你的域名：
+
+      <domain-config>
+          <domain includeSubdomains="true">nas.local</domain>
+          <trust-anchors>
+              <certificates src="system" />
+              <certificates src="user" />
+              <certificates src="@raw/my_ca" />
+          </trust-anchors>
+      </domain-config>
+
+      其中 @raw/my_ca 是可选的，把 PEM/DER 证书放到 res/raw/my_ca 即可。
+      改完重新构建。
+    -->
+
 </network-security-config>
 """
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(content)
-    log("android: + res/xml/network_security_config.xml")
+    log("android: + res/xml/network_security_config.xml（Android 17 CT 默认开启）")
 
 
 def _write_file_paths() -> None:
