@@ -9,6 +9,7 @@ import '../../data/models/release_info.dart';
 import '../../state/providers.dart';
 import '../browser/navigation.dart';
 import '../downloads/downloads_page.dart';
+import 'account_page.dart';
 import 'update_dialog.dart';
 
 /// 设置页
@@ -114,6 +115,8 @@ class SettingsPage extends ConsumerWidget {
                 }
               },
             ),
+            const _SectionTitle(title: '账号'),
+            const AccountTile(),
             const _SectionTitle(title: '更新'),
             const _UpdateTile(),
             ListTile(
