@@ -30,6 +30,17 @@ class BookmarkRepository {
     await _persist(list);
   }
 
+  /// 直接写入一条书签（云同步用）。
+  ///
+  /// 与 [add] 的区别：这里按 id 去重，保留传入条目的原始 id 和创建时间，
+  /// 否则同步过来的书签会被重新编号，下次同步又会被当成新条目。
+  Future<void> put(Bookmark bookmark) async {
+    final list = (await all()).toList();
+    if (list.any((b) => b.id == bookmark.id)) return;
+    list.insert(0, bookmark);
+    await _persist(list);
+  }
+
   Future<void> remove(String id) async {
     final list = (await all()).toList()..removeWhere((b) => b.id == id);
     await _persist(list);
