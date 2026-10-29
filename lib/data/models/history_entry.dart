@@ -20,6 +20,14 @@ class HistoryEntry {
         visitedAt: DateTime.now(),
       );
 
+  HistoryEntry copyWith({String? title, String? url, DateTime? visitedAt}) =>
+      HistoryEntry(
+        id: id,
+        title: title ?? this.title,
+        url: url ?? this.url,
+        visitedAt: visitedAt ?? this.visitedAt,
+      );
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
