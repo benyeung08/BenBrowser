@@ -10,6 +10,17 @@ class AppConstants {
 
   static const int maxTabs = 20;
 
+  /// 同时保留 WebView 实例的标签上限。
+  ///
+  /// 每个标签是一个真实的 WebView（Android: 系统 WebView / Windows: WebView2），
+  /// 实例本身几十 MB 起，加上页面内容，20 个标签全在内存里极易 OOM。
+  ///
+  /// 标签数**不超过**这个值时全部保留（日常开两三个标签不受影响）；
+  /// 超过了才按最近使用顺序挂起最久未用的，切回时重建并重新加载。
+  ///
+  /// 想要「永不挂起」就把它设成 >= maxTabs，代价是多标签下的内存占用。
+  static const int maxLiveWebViews = 6;
+
   /// 检查更新用的 GitHub 仓库（owner/repo）。
   /// ★ 推送到你自己的仓库后，把这里改成你的，或在设置页里直接改。
   static const String defaultRepoSlug = 'OWNER/ben_browser';

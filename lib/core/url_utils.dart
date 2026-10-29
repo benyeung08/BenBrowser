@@ -9,14 +9,39 @@ class UrlUtils {
     r'^[\w\-]+(\.[\w\-]+)+(:\d+)?([/?#].*)?$',
   );
 
-  /// 把用户输入解析成可以直接加载的 Uri
+  /// 允许在 WebView 里加载的 scheme 白名单。
+  ///
+  /// 不做白名单的话，地址栏输入 `file:///etc/passwd` 或
+  /// `content://media/...` 会直接把本地文件/媒体库读进页面——
+  /// 浏览器不该有这个能力。
+  /// Windows 上 `file://` 偶有用于打开本地 HTML，但风险大于收益，一并禁掉。
+  static const Set<String> _allowedSchemes = <String>{
+    'http',
+    'https',
+    'about',
+  };
+
+  /// 该 Uri 是否允许加载。
+  /// 空 scheme（如 `about:blank`）视为安全。
+  static bool isAllowedScheme(Uri uri) {
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme.isEmpty) return true;
+    return _allowedSchemes.contains(scheme);
+  }
+
+  /// 把用户输入解析成可以直接加载的 Uri。
+  ///
+  /// 非白名单 scheme 一律退回搜索，而不是照原样加载。
   static Uri resolve(String input, {SearchEngine? engine}) {
     final text = input.trim();
     final e = engine ?? SearchEngine.bing;
     if (text.isEmpty) return Uri.parse(AppConstants.newTabUrl);
 
     if (_schemeRe.hasMatch(text)) {
-      return Uri.tryParse(text) ?? Uri.parse(searchUrl(text, e));
+      final parsed = Uri.tryParse(text);
+      if (parsed != null && isAllowedScheme(parsed)) return parsed;
+      // 不安全的 scheme：退化成搜索，绝不原样加载
+      return Uri.parse(searchUrl(text, e));
     }
     if (_domainRe.hasMatch(text)) {
       return Uri.parse('https://$text');
