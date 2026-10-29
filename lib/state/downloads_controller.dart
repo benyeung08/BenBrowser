@@ -50,7 +50,14 @@ class DownloadsController extends Notifier<List<DownloadTask>> {
     DownloadKind kind = DownloadKind.normal,
     String version = '',
   }) async {
-    final name = fileName ?? _guessFileName(url);
+    final name = _uniqueName(fileName ?? _guessFileName(url));
+
+    // 同一个地址正在下载时不要重复起任务：两个 Dio 会写同一个 savePath，
+    // 结果是文件损坏，而 UI 上只看到一个进度条在跳，很难排查。
+    for (final t in state) {
+      if (t.url == url && t.status == DownloadStatus.running) return t.id;
+    }
+
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     final task = DownloadTask(
       id: id,
@@ -67,10 +74,11 @@ class DownloadsController extends Notifier<List<DownloadTask>> {
   }
 
   Future<void> _run(DownloadTask task, String name) async {
+    String? savePath;
     try {
       final dir = await _downloadDir;
       // 同名文件先删掉：更新包重下时避免安装器提示「包体不一致」
-      final savePath = p.join(dir.path, name);
+      savePath = p.join(dir.path, name);
       final file = File(savePath);
       if (await file.exists()) await file.delete();
 
@@ -93,6 +101,16 @@ class DownloadsController extends Notifier<List<DownloadTask>> {
       final canceled = e is DioException && e.type == DioExceptionType.cancel;
       if (!canceled) {
         _patch(task.id, (t) => t.copyWith(status: DownloadStatus.failed));
+      }
+      // 半截文件必须删掉：留着的话下次「打开」会拿到一个损坏的文件，
+      // 而列表里显示的是「已取消」，用户根本想不到是这个残留造成的。
+      if (canceled && savePath != null) {
+        try {
+          final f = File(savePath);
+          if (await f.exists()) await f.delete();
+        } catch (_) {
+          // 删不掉就算了，不影响主流程
+        }
       }
     } finally {
       _tokens.remove(task.id);
@@ -141,11 +159,33 @@ class DownloadsController extends Notifier<List<DownloadTask>> {
     ];
   }
 
+  /// 生成一个不会与已有任务冲突的文件名。
+  ///
+  /// 之前同名文件直接覆盖：两个不同地址下载到同一个 `a.zip` 时，
+  /// 后完成的会把先完成的悄悄替换掉，用户拿到的是错误的文件。
+  /// 现在遇到冲突就加 `(1)` `(2)` 后缀。
+  String _uniqueName(String base) {
+    final inUse = <String>{for (final t in state) t.fileName};
+    if (!inUse.contains(base)) return base;
+
+    final dot = base.lastIndexOf('.');
+    final stem = dot > 0 ? base.substring(0, dot) : base;
+    final ext = dot > 0 ? base.substring(dot) : '';
+    for (var i = 1; i < 1000; i++) {
+      final candidate = '$stem($i)$ext';
+      if (!inUse.contains(candidate)) return candidate;
+    }
+    // 极端情况下兜底，不至于死循环
+    return '${stem}_${DateTime.now().millisecondsSinceEpoch}$ext';
+  }
+
   String _guessFileName(String url) {
     final uri = Uri.tryParse(url);
     final seg = uri?.pathSegments.where((s) => s.isNotEmpty).toList() ?? [];
-    if (seg.isNotEmpty) return seg.last;
-    final stamp = DateTime.now().millisecondsSinceEpoch;
-    return 'download_$stamp.bin';
+    final base = seg.isNotEmpty
+        ? seg.last
+        : 'download_${DateTime.now().millisecondsSinceEpoch}.bin';
+    // 顺手去掉路径分隔符，避免恶意服务端用 "../../x" 之类的文件名
+    return _uniqueName(base.replaceAll(RegExp(r'[/\\]'), '_'));
   }
 }

@@ -93,12 +93,14 @@ class TabsController extends Notifier<TabsState> {
     openTab(url: homeUrl ?? _settings?.homeUrl ?? AppConstants.defaultHome);
   }
 
-  void openTab({
+  /// 新建一个标签。达到上限时返回 false（此前是静默 return，
+  /// 用户点「+」没任何反应，看起来像应用卡了），由调用方决定是否提示。
+  bool openTab({
     String url = AppConstants.newTabUrl,
     bool? incognito,
     bool select = true,
   }) {
-    if (state.tabs.length >= AppConstants.maxTabs) return;
+    if (state.tabs.length >= AppConstants.maxTabs) return false;
     final useIncognito = incognito ?? _settings?.incognitoByDefault ?? false;
     final tab = BrowserTab.create(url: url, incognito: useIncognito);
     final tabs = [...state.tabs, tab];
@@ -107,6 +109,7 @@ class TabsController extends Notifier<TabsState> {
       activeIndex: select ? tabs.length - 1 : state.activeIndex,
       recent: _touch(state.recent, tab.id),
     );
+    return true;
   }
 
   void closeTab(String id) {
