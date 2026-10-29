@@ -62,7 +62,7 @@ class AccountService {
   /// 登录状态变化流。未配置时返回空流，UI 不会因此报错。
   Stream<UserAccount?> get authStateChanges {
     final client = _client;
-    if (client == null) return Stream<UserAccount?>.empty();
+    if (client == null) return const Stream<UserAccount?>.empty();
     return client.auth.onAuthStateChange.map((event) {
       final user = event.session?.user;
       return user == null ? null : _fromUser(user);
@@ -116,11 +116,11 @@ class AccountService {
         meta['full_name'],
         meta['name'],
         meta['preferred_username'],
-      ]) as String?,
+      ]),
       avatarUrl: _firstNonEmpty([
         meta['avatar_url'],
         meta['picture'],
-      ]) as String?,
+      ]),
     );
   }
 

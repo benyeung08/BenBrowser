@@ -39,7 +39,7 @@ class SyncService {
 
       final payload = row['payload'];
       if (payload is! Map) return null;
-      return SyncSnapshot.fromJson(Map<String, dynamic>.from(payload as Map));
+      return SyncSnapshot.fromJson(Map<String, dynamic>.from(payload));
     } catch (_) {
       // 表不存在、RLS 拒了、断网……都当作「没有远端数据」
       return null;
