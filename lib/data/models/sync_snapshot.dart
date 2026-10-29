@@ -40,8 +40,7 @@ class SyncSnapshot {
     return SyncSnapshot(
       bookmarks: [
         for (final item in list)
-          if (item is Map)
-            Bookmark.fromJson(Map<String, dynamic>.from(item as Map)),
+          if (item is Map) Bookmark.fromJson(Map<String, dynamic>.from(item)),
       ],
       settings: json['settings'] is Map
           ? AppSettings.fromJson(
