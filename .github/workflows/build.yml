@@ -25,6 +25,31 @@ jobs:
           # 建议版本稳定后锁定，例如：flutter-version: '3.35.1'
       - name: 安装依赖
         run: flutter pub get
+
+      # 关键依赖若没解析成功，analyze 会报一片 uri_does_not_exist /
+      # undefined_class，看起来像代码写错了，实际是依赖没装上——
+      # 排查方向会被带偏。这里先显式确认，失败就直接停。
+      - name: 校验依赖已解析
+        run: |
+          CONFIG=.dart_tool/package_config.json
+          if [ ! -f "$CONFIG" ]; then
+            echo "::error::未找到 $CONFIG，flutter pub get 没有成功完成"
+            exit 1
+          fi
+          MISSING=0
+          for pkg in supabase_flutter flutter_riverpod flutter_inappwebview dio; do
+            if grep -q "\"$pkg\"" "$CONFIG"; then
+              echo "✅ $pkg"
+            else
+              echo "::error::依赖未解析：$pkg"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -ne 0 ]; then
+            echo "::error::有依赖未装上，检查 pubspec.yaml 与版本约束"
+            exit 1
+          fi
+
       - name: 静态检查
         # 只分析 lib 与 test，避免各平台原生壳目录干扰结果。
         # tee 保留完整日志方便排查；pipefail 确保 analyze 的失败码不被 tee 吃掉
