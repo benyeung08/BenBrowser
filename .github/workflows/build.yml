@@ -26,6 +26,11 @@ jobs:
       - name: 安装依赖
         run: flutter pub get
 
+      # 必须在 analyze 之前跑：错位副本会让 analyze 报一大片假错误，
+      # 掩盖真正的问题。先清干净再分析。
+      - name: 检查文件布局（清理错位副本）
+        run: python3 tool/check_layout.py
+
       # 依赖没解析成功时，analyze 会报一片 uri_does_not_exist /
       # undefined_class / depend_on_referenced_packages，看起来像代码写错了，
       # 实际是包没装上——排查方向会被彻底带偏。
@@ -188,6 +193,10 @@ jobs:
 
       # flutter create 会用模板覆盖 lib/main.dart，并生成引用 MyApp 的
       # test/widget_test.dart，两者都会让打包结果变成计数器 demo，必须还原
+      # 同上：先清掉错位副本，避免它盖住真正的构建错误
+      - name: 检查文件布局（清理错位副本）
+        run: python3 tool/check_layout.py
+
       - name: 生成 Android 壳
         run: |
           cp lib/main.dart "$RUNNER_TEMP/main.dart.bak"
@@ -283,6 +292,17 @@ jobs:
         run: flutter config --enable-windows-desktop
 
       # flutter create 同样会覆盖 lib/main.dart 并生成模板测试，必须还原
+      # 同上：先清掉错位副本，避免它盖住真正的构建错误。
+      # Windows runner 没有 python3 别名，做兼容探测。
+      - name: 检查文件布局（清理错位副本）
+        shell: bash
+        run: |
+          if command -v python3 >/dev/null 2>&1; then
+            python3 tool/check_layout.py
+          else
+            python tool/check_layout.py
+          fi
+
       - name: 生成 Windows 壳
         shell: bash
         run: |
