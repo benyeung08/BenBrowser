@@ -8,6 +8,13 @@ class AppSettings {
   final String customUserAgent;
   final bool javaScriptEnabled;
   final bool incognitoByDefault;
+  /// 启动时恢复上次打开的标签。
+  ///
+  /// ⚠️ **当前尚未实现**：全项目没有任何地方读取它，也没有对应的 UI 开关。
+  /// 默认值此前是 `true`，等于向用户宣称了一个不存在的功能，
+  /// 所以改成 `false`——等真正实现了再改回来。
+  bool get isTabRestoreImplemented => false;
+
   final bool restoreTabsOnLaunch;
   final ThemeModeSetting themeMode;
 
@@ -24,7 +31,8 @@ class AppSettings {
     this.customUserAgent = '',
     this.javaScriptEnabled = true,
     this.incognitoByDefault = false,
-    this.restoreTabsOnLaunch = true,
+    // 见 [isTabRestoreImplemented]：功能未实现，默认不能是 true
+    this.restoreTabsOnLaunch = false,
     this.themeMode = ThemeModeSetting.system,
     this.repoSlug = AppConstants.defaultRepoSlug,
     this.checkUpdateOnLaunch = true,
@@ -89,7 +97,7 @@ class AppSettings {
         customUserAgent: json['customUserAgent'] as String? ?? '',
         javaScriptEnabled: json['javaScriptEnabled'] as bool? ?? true,
         incognitoByDefault: json['incognitoByDefault'] as bool? ?? false,
-        restoreTabsOnLaunch: json['restoreTabsOnLaunch'] as bool? ?? true,
+        restoreTabsOnLaunch: json['restoreTabsOnLaunch'] as bool? ?? false,
         themeMode: ThemeModeSetting.values.firstWhere(
           (e) => e.name == json['themeMode'],
           orElse: () => ThemeModeSetting.system,
