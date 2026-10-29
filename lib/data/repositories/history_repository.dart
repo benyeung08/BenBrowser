@@ -34,6 +34,19 @@ class HistoryRepository {
     if (url.isEmpty || url.startsWith('about:')) return;
 
     final list = (await all()).toList();
+
+    // 已经在首位且标题没变：只更新访问时间。
+    // 上限 2000 条时一次全量 JSON 编码 + 写入约 300KB，
+    // 连续刷新同一页面会反复触发这种无谓的大写入。
+    if (list.isNotEmpty && list.first.url == url) {
+      final top = list.first;
+      if (top.title == title) {
+        list[0] = top.copyWith(visitedAt: DateTime.now());
+        await _persist(list);
+        return;
+      }
+    }
+
     // 同一地址重复访问时只更新时间，避免列表被刷屏
     list.removeWhere((e) => e.url == url);
     list.insert(0, HistoryEntry.create(title: title, url: url));
