@@ -146,14 +146,20 @@ class _BrowserToolbarState extends ConsumerState<BrowserToolbar> {
   Future<void> _toggleBookmark(BrowserTab tab, bool exists) async {
     if (tab.url.isEmpty || tab.url == AppConstants.newTabUrl) return;
     final repo = await ref.read(bookmarkRepositoryProvider.future);
+    // 切标签/关标签都可能让本 widget 在这几个 await 之间被卸载，
+    // 之后再碰 ref 会抛 StateError。每步都确认一次。
+    if (!mounted) return;
     if (exists) {
       final list = await repo.all();
+      if (!mounted) return;
       final targets = list.where((b) => b.url == tab.url).toList();
       for (final t in targets) {
         await repo.remove(t.id);
+        if (!mounted) return;
       }
     } else {
       await repo.add(title: tab.displayTitle, url: tab.url);
+      if (!mounted) return;
     }
     ref.invalidate(bookmarksProvider);
   }

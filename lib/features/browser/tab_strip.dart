@@ -81,7 +81,16 @@ class TabStrip extends ConsumerWidget {
           IconButton(
             tooltip: '新建标签页',
             icon: const Icon(Icons.add, size: 20),
-            onPressed: () => ref.read(tabsProvider.notifier).openTab(),
+            onPressed: () {
+              // 静默失败会让人以为按钮坏了，达到上限时明确提示
+              if (!ref.read(tabsProvider.notifier).openTab()) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('标签数量已达上限，请先关闭一些'),
+                  ),
+                );
+              }
+            },
           ),
         ],
       ),

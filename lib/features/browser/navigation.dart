@@ -73,10 +73,21 @@ Future<void> performBrowserAction(
 enum BrowserAction { back, forward, reload, stop, home }
 
 /// 清除浏览数据（缓存 + 本地历史）
+///
+/// 注意：这里是**自由函数**，`ref` 由调用方（一个 ConsumerWidget）传入，
+/// 拿不到 `mounted` 可供判断。await 期间用户可能已退出设置页，
+/// 此时再触碰 ref 有抛 StateError 的风险。好在那种情况下刷新 provider
+/// 本来就毫无意义（页面都没了，下次进入会重新读取），所以只吞掉这一种
+/// 异常即可——不能用空 catch，那会把真正的错误也一起藏掉。
 Future<void> clearBrowsingData(WidgetRef ref) async {
   final history = await ref.read(historyRepositoryProvider.future);
   await history.clear();
-  ref.invalidate(historyProvider);
+
+  try {
+    ref.invalidate(historyProvider);
+  } on StateError {
+    // 宿主 widget 已卸载，忽略
+  }
 
   // 清缓存：clearAllCache 是 InAppWebViewController 的**静态方法**，
   // 必须用类名调用，不能用实例（instance_access_to_static_member）。

@@ -140,9 +140,15 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
     return (progress - _lastReportedProgress).abs() >= 5;
   }
 
+  /// 这两个方法都是 `unawaited` 发射出去的，完全脱离了 UI 的生命周期。
+  /// 加载过程中用户关掉标签 → widget 被卸载 → 此时再 `ref.read` 会抛
+  /// StateError("Cannot use ref after disposed")，而 unawaited 又意味着
+  /// 没人能 catch 它。所以**每个 await 之后**都必须确认 mounted。
   Future<void> _syncNavState(InAppWebViewController controller) async {
     final back = await controller.canGoBack();
+    if (!mounted) return;
     final forward = await controller.canGoForward();
+    if (!mounted) return;
     ref.read(tabsProvider.notifier).updateTab(
           tab.id,
           (t) => t.copyWith(canGoBack: back, canGoForward: forward),
@@ -153,7 +159,9 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
     if (url == null || tab.incognito) return;
     if (!UrlUtils.isSecure(url) && !url.startsWith('http://')) return;
     final repo = await ref.read(historyRepositoryProvider.future);
+    if (!mounted) return;
     await repo.add(title: tab.title, url: url);
+    if (!mounted) return;
     ref.invalidate(historyProvider);
   }
 }
