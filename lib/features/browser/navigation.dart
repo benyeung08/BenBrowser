@@ -14,6 +14,11 @@ Future<void> navigateTo(WidgetRef ref, BrowserTab tab, String input) async {
 }
 
 Future<void> loadUri(WidgetRef ref, BrowserTab tab, Uri uri) async {
+  // 二次校验：地址栏走的是 UrlUtils.resolve（已有白名单），
+  // 但新标签打开（target=_blank）、书签等路径可能直接带进来任意 scheme，
+  // 这里统一再拦一道。
+  if (!UrlUtils.isAllowedScheme(uri)) return;
+
   final controller = ref.read(webViewRegistryProvider).get(tab.id);
   if (controller == null) {
     // 新标签页还没有 WebView 实例，直接改写状态，由 UI 重建时加载

@@ -50,13 +50,18 @@ class BrowserPage extends ConsumerWidget {
 
   Widget _buildBody(WidgetRef ref, TabsState tabs) {
     if (tabs.isEmpty) return const _EmptyView();
+    final live = tabs.liveTabIds;
     return IndexedStack(
       index: tabs.safeIndex,
       children: [
         for (final tab in tabs.tabs)
           KeyedSubtree(
             key: ValueKey<String>(tab.id),
-            child: _TabBody(tab: tab),
+            // 挂起的标签不持有 WebView 实例，只显示一张占位卡。
+            // 切回时重新成为 live，WebViewSurface 会重建并重新加载该 URL。
+            child: live.contains(tab.id)
+                ? _TabBody(tab: tab)
+                : _SuspendedTab(tab: tab),
           ),
       ],
     );
@@ -75,6 +80,50 @@ class _TabBody extends StatelessWidget {
     return isBlank
         ? NewTabPage(tab: tab)
         : WebViewSurface(key: ValueKey<String>(tab.id), tab: tab);
+  }
+}
+
+/// 被挂起标签的占位卡。
+///
+/// 存在的意义是释放 WebView 实例：开很多标签时不至于把内存吃光。
+/// 显示标题与地址，让用户知道这个标签还在，切回即可重新加载。
+class _SuspendedTab extends StatelessWidget {
+  const _SuspendedTab({required this.tab});
+
+  final BrowserTab tab;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.hourglass_empty,
+              size: 40,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              tab.displayTitle,
+              style: theme.textTheme.titleSmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '已释放以节省内存，切回时重新加载',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

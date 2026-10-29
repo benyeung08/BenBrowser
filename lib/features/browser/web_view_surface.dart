@@ -30,6 +30,14 @@ class WebViewSurface extends ConsumerStatefulWidget {
 class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
   late final WebViewRegistry _registry;
 
+  /// 上次上报的进度值。
+  ///
+  /// onProgressChanged 在加载期间会触发上百次，每次都 updateTab 会让
+  /// 整棵 tabsProvider 监听树重建（工具栏、标签条、所有子项）。
+  /// 进度条肉眼分辨不出 5% 以内的差别，这里做节流：
+  /// 只在跨过 5% 台阶或到达终态（0 / 100）时才真正更新状态。
+  int _lastReportedProgress = -1;
+
   BrowserTab get tab => widget.tab;
 
   @override
@@ -69,6 +77,8 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
         unawaited(_recordHistory(url?.toString()));
       },
       onProgressChanged: (controller, progress) {
+        if (!_shouldReport(progress)) return;
+        _lastReportedProgress = progress;
         _update(progress: progress, isLoading: progress < 100);
       },
       onTitleChanged: (controller, title) {
@@ -121,6 +131,13 @@ class _WebViewSurfaceState extends ConsumerState<WebViewSurface> {
             isLoading: isLoading ?? t.isLoading,
           ),
         );
+  }
+
+  /// 是否需要把这次进度变化同步到全局状态
+  bool _shouldReport(int progress) {
+    if (progress <= 0 || progress >= 100) return true; // 始终反映首/末态
+    if (_lastReportedProgress < 0) return true;
+    return (progress - _lastReportedProgress).abs() >= 5;
   }
 
   Future<void> _syncNavState(InAppWebViewController controller) async {
