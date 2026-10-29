@@ -1,5 +1,3 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import '../core/constants.dart';
 import '../data/models/sync_snapshot.dart';
 import 'account_service.dart';
