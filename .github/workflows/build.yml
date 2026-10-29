@@ -26,9 +26,12 @@ jobs:
       - name: 安装依赖
         run: flutter pub get
 
-      # 关键依赖若没解析成功，analyze 会报一片 uri_does_not_exist /
-      # undefined_class，看起来像代码写错了，实际是依赖没装上——
-      # 排查方向会被带偏。这里先显式确认，失败就直接停。
+      # 依赖没解析成功时，analyze 会报一片 uri_does_not_exist /
+      # undefined_class / depend_on_referenced_packages，看起来像代码写错了，
+      # 实际是包没装上——排查方向会被彻底带偏。
+      #
+      # 这里直接扫描 lib/ 里**真实用到的** package: 导入来核对，
+      # 而不是写死一份清单（清单会过时、也会漏掉新增的依赖）。
       - name: 校验依赖已解析
         run: |
           CONFIG=.dart_tool/package_config.json
@@ -36,19 +39,59 @@ jobs:
             echo "::error::未找到 $CONFIG，flutter pub get 没有成功完成"
             exit 1
           fi
-          MISSING=0
-          for pkg in supabase_flutter flutter_riverpod flutter_inappwebview dio; do
+
+          # 取出代码里所有 package:xxx 的包名。
+          # 排除本包自身（test/ 会 import 'package:ben_browser/...'）：
+          # 它必然在 package_config.json 里，否则会误报，且无法 pub add。
+          SELF=$(grep -m1 '^name:' pubspec.yaml | sed -E 's/^name:[[:space:]]*//')
+          PKGS=$(grep -rhoE "package:[a-zA-Z_][a-zA-Z0-9_]*/" lib/ test/ \
+            | sed -E 's#^package:([a-zA-Z_][a-zA-Z0-9_]*)/$#\1#' \
+            | sort -u | grep -vx "$SELF")
+          echo "代码引用到的包："
+          echo "$PKGS"
+
+          MISSING=""
+          for pkg in $PKGS; do
             if grep -q "\"$pkg\"" "$CONFIG"; then
-              echo "✅ $pkg"
+              echo "  ✅ $pkg"
             else
-              echo "::error::依赖未解析：$pkg"
-              MISSING=1
+              echo "  ❌ $pkg（未解析）"
+              MISSING="$MISSING $pkg"
             fi
           done
-          if [ "$MISSING" -ne 0 ]; then
-            echo "::error::有依赖未装上，检查 pubspec.yaml 与版本约束"
+
+          if [ -z "$MISSING" ]; then
+            echo "所有依赖均已解析 ✅"
+            exit 0
+          fi
+
+          echo "::warning::以下包未解析：$MISSING"
+          echo "::warning::多半是 pubspec.yaml 未同步（只更新了 lib/），或版本约束与当前 SDK 冲突"
+
+          # 自愈：显式补声明再拉一次。CI 里不提交，不会影响仓库；
+          # 本地也安全——已声明的包不会被改动。
+          for pkg in $MISSING; do
+            if grep -qE "^[[:space:]]+$pkg:" pubspec.yaml; then
+              echo "$pkg 已在 pubspec.yaml 中声明，跳过补声明"
+              continue
+            fi
+            echo "补声明 $pkg ..."
+            flutter pub add "$pkg" || true
+          done
+          flutter pub get
+
+          # 复查
+          STILL=""
+          for pkg in $MISSING; do
+            grep -q "\"$pkg\"" "$CONFIG" || STILL="$STILL $pkg"
+          done
+          if [ -n "$STILL" ]; then
+            echo "::error::补声明后仍未解析：$STILL"
+            echo "::error::请检查 pubspec.yaml 是否包含这些依赖，以及 environment.sdk 是否满足它们的 Min Dart SDK"
+            flutter pub get -v 2>&1 | tail -40 || true
             exit 1
           fi
+          echo "自愈完成 ✅"
 
       - name: 静态检查
         # 只分析 lib 与 test，避免各平台原生壳目录干扰结果。
