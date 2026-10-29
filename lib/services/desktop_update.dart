@@ -62,11 +62,17 @@ class WindowsUpdater {
       onProgress?.call(0.93);
 
       // 3) 定位新版本的主程序
-      final newExe = _findExe(Directory(pkgDir));
+      final newExe = await _findExe(Directory(pkgDir));
       if (newExe == null) {
         throw StateError('更新包里没有找到可执行文件');
       }
       final targetExe = p.join(installDir, p.basename(newExe));
+
+      // 关键：复制源取 **exe 所在的那一层目录**，而不是解压根目录。
+      // 若 zip 带顶层目录（例如 BenBrowser-windows-x64\...），
+      // 直接拷 pkgDir 会把整个目录套进安装目录，真正的 exe 得不到替换——
+      // 表现是「更新完成但仍旧版本」，且完全静默。
+      final copySrc = p.dirname(newExe);
 
       // 4) 写替换脚本（把路径直接烧进脚本，避免命令行引号问题）
       final logFile = p.join(tempRoot.path, 'updater.log');
@@ -74,15 +80,20 @@ class WindowsUpdater {
       await bat.writeAsString(
         _buildScript(
           pid: pid.toString(),
-          src: pkgDir,
+          src: copySrc,
           dst: installDir,
           exe: targetExe,
           log: logFile,
+          tmpRoot: tempRoot.path,
         ),
         flush: true,
       );
 
       // 5) 脱离本进程启动。cmd 会立刻返回，脚本独立存活。
+      //
+      // 清理责任移交给脚本（脚本会 rmdir 整个 tempRoot）。
+      // 之前只在**失败**分支删临时目录，成功时 update.zip（几十 MB）
+      // 连同 bat/log 会永久留在系统临时目录，每更新一次累积一份。
       await Process.start(
         'cmd.exe',
         ['/c', 'start', '""', '/MIN', bat.path],
@@ -109,7 +120,9 @@ class WindowsUpdater {
     if (!await destDir.exists()) {
       await destDir.create(recursive: true);
     }
-    final base = destDir.absolute.path;
+    // 先解析符号链接拿到真实路径，否则 /link -> /etc 这类条目能绕过
+    // isWithin 检查（字符串层面看着在目录内，实际指向外面）。
+    final base = await destDir.resolveSymbolicLinks();
 
     for (final file in archive) {
       final name = file.name.replaceAll('\\', '/');
@@ -140,37 +153,70 @@ class WindowsUpdater {
   }
 
   /// 在解压目录里找主程序。优先 ben_browser.exe，否则挑体积最大的 exe。
-  String? _findExe(Directory pkg) {
-    if (!pkg.existsSync()) return null;
+  ///
+  /// 全程用异步 IO：之前用 listSync / lengthSync 会在 UI 线程上做
+  /// 递归目录遍历 + 大量 stat，包大时明显掉帧。
+  Future<String?> _findExe(Directory pkg) async {
+    if (!await pkg.exists()) return null;
 
-    final files = pkg
-        .listSync(recursive: true)
+    final files = await pkg
+        .list(recursive: true)
         .whereType<File>()
         .where((f) => f.path.toLowerCase().endsWith('.exe'))
         .toList();
     if (files.isEmpty) return null;
 
     for (final f in files) {
-      if (p.basenameWithoutExtension(f.path).toLowerCase() ==
-          'ben_browser') {
+      if (p.basenameWithoutExtension(f.path).toLowerCase() == 'ben_browser') {
         return f.path;
       }
     }
-    files.sort((a, b) => b.lengthSync().compareTo(a.lengthSync()));
-    return files.first.path;
+
+    // 按体积取最大的（主程序通常远大于依赖 dll）
+    var best = files.first;
+    var bestSize = await best.length();
+    for (final f in files.skip(1)) {
+      final size = await f.length();
+      if (size > bestSize) {
+        best = f;
+        bestSize = size;
+      }
+    }
+    return best.path;
   }
 
   /// 生成替换脚本：等进程退出 → 拷文件 → 重启 → 收尾。
   ///
   /// 用 robocopy 是因为它对"部分文件被占用"的容错更好；返回码 ≥8 才算真失败，
   /// 此时回退到 xcopy。两条都走不通时日志会记下来，方便排查。
+  /// 把路径烧进脚本前先做一次「危险字符」检查。
+  ///
+  /// 路径里若出现引号、&、|、^ 等字符，会破坏 set "VAR=..." 的结构，
+  /// 轻则变量值截断，重则被 cmd 当成命令分隔符执行。
+  /// 这里直接拒绝，宁可不更新也不能拼出一个行为不确定的脚本。
+  static void _assertSafeForBatch(String label, String value) {
+    if (RegExp(r'[&|^<>"]').hasMatch(value)) {
+      throw StateError('$label 含有批处理危险字符，无法安全更新：$value');
+    }
+  }
+
   String _buildScript({
     required String pid,
     required String src,
     required String dst,
     required String exe,
     required String log,
+    required String tmpRoot,
   }) {
+    for (final entry in <String, String>{
+      'SRC': src,
+      'DST': dst,
+      'EXE': exe,
+      'LOG': log,
+      'TMPROOT': tmpRoot,
+    }.entries) {
+      _assertSafeForBatch(entry.key, entry.value);
+    }
     return '@echo off\r\n'
         'setlocal\r\n'
         'set "PID=$pid"\r\n'
@@ -178,6 +224,7 @@ class WindowsUpdater {
         'set "DST=$dst"\r\n'
         'set "EXE=$exe"\r\n'
         'set "LOG=$log"\r\n'
+        'set "TMPROOT=$tmpRoot"\r\n'
         '\r\n'
         'echo [%date% %time%] updater start, waiting for pid %PID% > "%LOG%"\r\n'
         '\r\n'
@@ -201,7 +248,13 @@ class WindowsUpdater {
         'start "" "%EXE%"\r\n'
         '\r\n'
         'echo [%date% %time%] cleanup >> "%LOG%"\r\n'
-        'rmdir /S /Q "%SRC%" 2>nul\r\n'
-        'endlocal\r\n';
+        // 先把日志留一份在安装目录，方便事后排查「更新没生效」这类问题；
+        // 失败了也无所谓（>nul 2>&1），不能因为它挡住清理。
+        'copy /Y "%LOG%" "%DST%\\update-last.log" >nul 2>&1\r\n'
+        // 再删整个临时根目录（含 update.zip），而不是只删解压出的 pkg。
+        // 注意：rmdir 必须是**最后一条** —— cmd 是逐行读取 bat 的，
+        // 把正在执行的 bat 自己删掉后再读下一行会出错，所以省掉末尾的
+        // endlocal（脚本结束进程即退出，它没有意义）。
+        'rmdir /S /Q "%TMPROOT%" 2>nul\r\n';
   }
 }

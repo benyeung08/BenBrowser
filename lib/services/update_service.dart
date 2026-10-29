@@ -39,6 +39,17 @@ class UpdateService {
 
   static const Duration _timeout = Duration(seconds: 15);
 
+  /// 可选的 GitHub token，用于提高 API 限流额度。
+  ///
+  /// 未鉴权时 GitHub 只允许 **60 次/小时/IP**，而 checkUpdateOnLaunch
+  /// 默认是开的，同一个网络里多设备同时启动很容易 403。
+  /// 传入方式：`--dart-define=GITHUB_TOKEN=ghp_xxx`
+  /// （只需要 public_repo 之外的**只读**权限，甚至可以不给任何 scope）
+  static final String? githubToken = () {
+    final v = const String.fromEnvironment('GITHUB_TOKEN');
+    return v.isEmpty ? null : v;
+  }();
+
   Future<String> currentVersion() async {
     final info = await PackageInfo.fromPlatform();
     return info.version;
@@ -65,8 +76,9 @@ class UpdateService {
       final response = await _dio.get<Map<String, dynamic>>(
         'https://api.github.com/repos/$slug/releases/latest',
         options: Options(
-          headers: const <String, String>{
+          headers: <String, String>{
             'Accept': 'application/vnd.github+json',
+            if (githubToken != null) 'Authorization': 'Bearer $githubToken',
           },
           sendTimeout: _timeout,
           receiveTimeout: _timeout,
@@ -82,6 +94,16 @@ class UpdateService {
           result: UpdateCheckResult.noRelease,
           currentVersion: current,
           message: '该仓库还没有发布 Release（打 tag 后由 CI 自动生成）',
+        );
+      }
+
+      if (response.statusCode == 403 || response.statusCode == 429) {
+        return UpdateCheckOutcome(
+          result: UpdateCheckResult.failed,
+          currentVersion: current,
+          message: githubToken == null
+              ? 'GitHub API 限流（未鉴权仅 60 次/小时/IP），稍后再试'
+              : 'GitHub API 限流，稍后再试',
         );
       }
 
