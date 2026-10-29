@@ -35,7 +35,8 @@ class BenBrowserApp extends ConsumerWidget {
   /// 决定首屏是浏览器还是登录门。
   ///
   /// 放行条件（满足任一即进浏览器）：
-  /// - 当前平台不要求登录（Android）
+  /// - 当前平台不要求登录（目前 Android / Windows 都要求，只有未知
+  ///   平台如 linux 不要求）
   /// - 已登录
   /// - 云服务没配置好，且用户已选「暂不登录」——这时不放行会把人锁死
   Widget _buildHome(WidgetRef ref) {
