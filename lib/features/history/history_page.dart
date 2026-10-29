@@ -38,7 +38,9 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
               icon: const Icon(Icons.delete_sweep),
               onPressed: () async {
                 final repo = await ref.read(historyRepositoryProvider.future);
+                if (!mounted) return;
                 await repo.clear();
+                if (!mounted) return;
                 ref.invalidate(historyProvider);
               },
             ),
@@ -81,7 +83,9 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                           onPressed: () async {
                             final repo =
                                 await ref.read(historyRepositoryProvider.future);
+                            if (!mounted) return;
                             await repo.remove(item.id);
+                            if (!mounted) return;
                             ref.invalidate(historyProvider);
                           },
                         ),
