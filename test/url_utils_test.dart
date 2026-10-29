@@ -34,6 +34,27 @@ void main() {
         AppConstants.newTabUrl,
       );
     });
+
+    test('危险 scheme 不原样加载，退化为搜索', () {
+      // file:// / content:// 能读到本地文件与媒体库，浏览器不该具备这个能力。
+      // 它们必须退化成搜索，而不是被 WebView 直接打开。
+      final file = UrlUtils.resolve('file:///etc/passwd');
+      expect(file.toString(), contains('bing.com'));
+      expect(file.scheme, isNot('file'));
+
+      final content = UrlUtils.resolve('content://media/external/images/1');
+      expect(content.scheme, isNot('content'));
+    });
+
+    test('isAllowedScheme 只放行白名单', () {
+      expect(UrlUtils.isAllowedScheme(Uri.parse('https://a.com')), isTrue);
+      expect(UrlUtils.isAllowedScheme(Uri.parse('http://a.com')), isTrue);
+      expect(UrlUtils.isAllowedScheme(Uri.parse('about:blank')), isTrue);
+      expect(UrlUtils.isAllowedScheme(Uri.parse('file:///tmp/x')), isFalse);
+      expect(UrlUtils.isAllowedScheme(Uri.parse('content://x')), isFalse);
+      expect(UrlUtils.isAllowedScheme(Uri.parse('javascript:alert(1)')),
+          isFalse);
+    });
   });
 
   group('UrlUtils.pretty', () {
