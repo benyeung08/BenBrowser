@@ -212,6 +212,7 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
 
     try {
       final bookmarks = await ref.read(bookmarksProvider.future);
+      if (!mounted) return;
       final settings =
           ref.read(settingsProvider).valueOrNull ?? const AppSettings();
       final local = SyncSnapshot(
@@ -226,6 +227,7 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
 
       // 合并结果既写回本地，也推回云端 —— 双向收敛
       await _applyLocally(merged);
+      if (!mounted) return;
       final ok = await sync.push(merged);
 
       if (!mounted) return;
@@ -248,12 +250,18 @@ class _SyncSectionState extends ConsumerState<_SyncSection> {
   }
 
   /// 把合并后的结果落回本地仓库
+  ///
+  /// 书签可能有成百上千条，逐条 await 期间用户完全可能退出本页，
+  /// 所以每步都确认 mounted —— 否则 ref 会抛 StateError。
   Future<void> _applyLocally(SyncSnapshot snapshot) async {
     final bookmarkRepo = await ref.read(bookmarkRepositoryProvider.future);
+    if (!mounted) return;
     for (final b in snapshot.bookmarks) {
       await bookmarkRepo.put(b);
+      if (!mounted) return;
     }
     await ref.read(settingsProvider.notifier).save(snapshot.settings);
+    if (!mounted) return;
     ref.invalidate(bookmarksProvider);
   }
 
