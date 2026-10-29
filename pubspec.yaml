@@ -5,8 +5,14 @@ publish_to: 'none'
 version: 0.1.0+1
 
 environment:
-  sdk: '>=3.4.0 <4.0.0'
-  # 3.38 是门槛：默认 NDK 升到 r28（16KB 内存分页对齐的最低要求）。
+  # 3.9.0 不是随手写的：supabase_flutter 2.16+ 的 Min Dart SDK 就是 3.9。
+  # 若这里写低一些，pub 的 SDK-aware 版本求解会为了「兼容整个声明区间」
+  # 把 supabase_flutter 降到老版本，甚至解析不出来——表现为
+  # package_config.json 里根本没有 supabase_flutter，进而 analyze 报
+  # uri_does_not_exist / depend_on_referenced_packages，看着像代码错了。
+  sdk: '>=3.9.0 <4.0.0'
+  # 3.38 是门槛：默认 NDK 升到 r28（16KB 内存分页对齐的最低要求），
+  # 且自带 Dart >= 3.9，与上面的约束一致。
   # 本项目要 target 到 Android 17（API 37），由 tool/patch_platform.py
   # 强制覆盖 flutter.compileSdkVersion，所以不依赖 SDK 自带的默认值。
   flutter: '>=3.38.0'
@@ -34,6 +40,11 @@ dependencies:
 
   # 版本信息（设置页展示版本号 / 检查更新时比对）
   package_info_plus: ^8.1.0
+
+  # 云端账号与同步：Google / Microsoft 登录 + 书签与设置同步
+  # 一个服务同时提供 OAuth 和数据库，client id / secret 都放在后台，
+  # 客户端只需要项目 URL 与 publishable key（见 CloudConfig）
+  supabase_flutter: ^2.18.0
 
   # 解压更新包（桌面端下载 zip 后在应用内展开）
   archive: ^3.6.1
