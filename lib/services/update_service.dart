@@ -116,6 +116,18 @@ class UpdateService {
         );
       }
 
+      // 拿不到当前版本（PackageInfo 失败）时不能贸然判定「有更新」——
+      // 空字符串会被解析成 0，任何正式版本号都大于它，结果就是每次启动
+      // 都弹一次更新提示，而用户其实已经是最新版了。
+      if (current.isEmpty) {
+        return UpdateCheckOutcome(
+          result: UpdateCheckResult.upToDate,
+          release: release,
+          currentVersion: current,
+          message: '无法读取当前版本，已跳过比较',
+        );
+      }
+
       if (compareVersion(release.version, current) <= 0) {
         return UpdateCheckOutcome(
           result: UpdateCheckResult.upToDate,
