@@ -241,6 +241,18 @@ CI 默认**要求 SDK 37 真实存在**，拿不到就直接失败，不做静�
 
 ---
 
+## 依赖与 SDK 约束 / Dependency & SDK constraints
+
+`environment.sdk` 是 **`>=3.9.0`**，不是随手写的：`supabase_flutter` 2.16+ 的 Min Dart SDK 就是 3.9。
+若把这里写低，pub 的 SDK-aware 版本求解会为了「兼容整个声明区间」把 supabase_flutter 降到老版本甚至解析不出来——
+表现为 `.dart_tool/package_config.json` 里根本没有 `supabase_flutter`，analyze 随之报一片
+`uri_does_not_exist` / `undefined_class` / `depend_on_referenced_packages`，**看着像代码写错，实际是依赖没装上**。
+*`environment.sdk` is **`>=3.9.0`** for a reason: `supabase_flutter` 2.16+ requires Min Dart SDK 3.9. Declaring it lower makes pub's SDK-aware solver downgrade or fail to resolve it — `supabase_flutter` then never appears in `package_config.json` and analyze floods with `uri_does_not_exist` / `undefined_class`, **looking like a code bug when it's actually a missing dependency**.**
+
+更新 `lib/` 后**务必一并同步 `pubspec.yaml`**，只拷 Dart 文件会触发上面的假报错。
+CI 的「校验依赖已解析」会扫描代码里真实用到的 `package:` 导入逐一核对，缺了会先尝试自愈再失败并给出明确原因。
+*Always sync `pubspec.yaml` when updating `lib/` — copying only Dart files triggers the false errors above. CI's dependency check scans real `package:` imports and self-heals before failing with a clear reason.*
+
 ## 依赖版本 / Dependency Note
 
 `flutter_inappwebview` **6.x**。若锁到 5.x，需替换 `lib/features/browser/web_view_surface.dart` 里的：`InAppWebViewSettings`→`InAppWebViewGroupOptions`、`WebUri(url)`→`Uri`、`onDownloadStartRequest`→`onDownloadStart`。
