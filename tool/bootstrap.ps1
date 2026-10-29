@@ -30,6 +30,9 @@ if (Test-Path "test\widget_test.dart") {
 flutter pub get
 
 # Windows 端没有 android 目录时，补丁脚本自动跳过
+# 先清掉错位副本（手动拷文件容易放错目录，会让后续 analyze 报一大片假错误）
+python tool/check_layout.py
+
 python tool/patch_platform.py
 
 Write-Host "==> 完成。flutter run -d windows 即可调试"

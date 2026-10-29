@@ -30,6 +30,9 @@ fi
 rm -f test/widget_test.dart
 
 flutter pub get
+# 先清掉错位副本（手动拷文件容易放错目录，会让后续 analyze 报一大片假错误）
+python3 tool/check_layout.py
+
 python3 tool/patch_platform.py
 
 echo "==> 完成。运行 flutter run -d windows / -d <android 设备 id>"
