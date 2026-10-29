@@ -62,7 +62,7 @@ class LoginGate extends ConsumerWidget {
                   if (ready)
                     const SignInForm(showSyncNote: true)
                   else ...[
-                    _NotConfiguredNotice(),
+                    const _NotConfiguredNotice(),
                     const SizedBox(height: 16),
                     OutlinedButton(
                       onPressed: onSkip,

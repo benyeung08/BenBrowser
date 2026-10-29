@@ -71,8 +71,14 @@ class _SetupGuide extends StatelessWidget {
                 '登录与同步需要 Supabase 项目。填入以下两项后重新构建即可启用：',
               ),
               const SizedBox(height: 12),
-              _KeyValue(label: 'Supabase URL', value: 'https://xxx.supabase.co'),
-              _KeyValue(label: 'Publishable key', value: 'eyJhbGci...'),
+              const _KeyValue(
+                label: 'Supabase URL',
+                value: 'https://xxx.supabase.co',
+              ),
+              const _KeyValue(
+                label: 'Publishable key',
+                value: 'eyJhbGci...',
+              ),
               const SizedBox(height: 12),
               const Text(
                 '位置：lib/core/constants.dart 的 CloudConfig，'

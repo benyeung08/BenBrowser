@@ -48,13 +48,21 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
           version: widget.release.version,
         );
     if (!mounted) return;
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
+
+    // 顺序很关键：必须在 pop **之前** 拿到 messenger 和 navigator。
+    // pop 之后对话框的 Element 就被卸载了，此时再 ScaffoldMessenger.of(context)
+    // 会抛 "Looking up a deactivated widget's ancestor"。
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    messenger.showSnackBar(
       SnackBar(
         content: Text('v${widget.release.version} 正在后台下载'),
         action: SnackBarAction(
           label: '查看',
-          onPressed: () => _openDownloads(context),
+          onPressed: () => navigator.push(
+            MaterialPageRoute<void>(builder: (_) => const DownloadsPage()),
+          ),
         ),
       ),
     );
@@ -86,13 +94,6 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
         _error = '更新失败：$e';
       });
     }
-  }
-
-  static Future<void> _openDownloads(BuildContext context) async {
-    final nav = Navigator.of(context);
-    await nav.push(
-      MaterialPageRoute<void>(builder: (_) => const DownloadsPage()),
-    );
   }
 
   @override
@@ -207,7 +208,7 @@ class _UpdateDialogState extends ConsumerState<UpdateDialog> {
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
           )
-        else if (canInstall)
+        else if (canInstall && asset != null)
           FilledButton.icon(
             icon: const Icon(Icons.download, size: 18),
             label: const Text('后台下载'),
