@@ -55,22 +55,39 @@ class _SignInFormState extends ConsumerState<SignInForm> {
           ),
         ),
         const SizedBox(height: 10),
-        ProviderChoice(
-          provider: AccountProvider.google,
-          icon: Icons.g_mobiledata,
-          selected: _selected == AccountProvider.google,
-          onChanged: _busy
-              ? null
-              : () => setState(() => _selected = AccountProvider.google),
-        ),
-        const SizedBox(height: 10),
-        ProviderChoice(
-          provider: AccountProvider.microsoft,
-          icon: Icons.window_outlined,
-          selected: _selected == AccountProvider.microsoft,
-          onChanged: _busy
-              ? null
-              : () => setState(() => _selected = AccountProvider.microsoft),
+        // Flutter 3.32 起 Radio/RadioListTile 的 groupValue / onChanged 已弃用，
+        // 改为由 RadioGroup 祖先统一管理。附带好处：整组变成一个 tab 停靠点、
+        // 方向键可在选项间移动，无障碍语义也对得上。
+        //
+        // 泛型必须显式写：RadioGroup 按**精确类型**匹配内部的 Radio，
+        // 靠推断很容易匹配不上，表现是「点了没反应」而不是报错，极难排查。
+        RadioGroup<AccountProvider>(
+          groupValue: _selected,
+          // onChanged 是**必填且不可为 null** 的（类型 ValueChanged<T?>），
+          // 所以不能写 `_busy ? null : fn` —— 那会得到可空函数类型，
+          // 报 argument_type_not_assignable。
+          // 禁用改用内部 Radio 的 `enabled: false`（见 ProviderChoice）。
+          onChanged: (AccountProvider? value) {
+            if (_busy || value == null) return;
+            setState(() => _selected = value);
+          },
+          child: Column(
+            children: [
+              ProviderChoice(
+                provider: AccountProvider.google,
+                icon: Icons.g_mobiledata,
+                selected: _selected == AccountProvider.google,
+                enabled: !_busy,
+              ),
+              const SizedBox(height: 10),
+              ProviderChoice(
+                provider: AccountProvider.microsoft,
+                icon: Icons.window_outlined,
+                selected: _selected == AccountProvider.microsoft,
+                enabled: !_busy,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 20),
         FilledButton(
@@ -109,13 +126,16 @@ class ProviderChoice extends StatelessWidget {
     required this.provider,
     required this.icon,
     required this.selected,
-    required this.onChanged,
+    this.enabled = true,
   });
 
   final AccountProvider provider;
   final IconData icon;
   final bool selected;
-  final VoidCallback? onChanged;
+
+  /// 登录进行中禁用。旧的 `onChanged: null` 写法在新 API 下不再表达禁用，
+  /// 必须显式用 `enabled: false`。
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -126,9 +146,9 @@ class ProviderChoice extends StatelessWidget {
           ? theme.colorScheme.secondaryContainer
           : theme.colorScheme.surface,
       child: RadioListTile<AccountProvider>(
+        // groupValue / onChanged 由外层 RadioGroup 提供，这里只声明 value
         value: provider,
-        groupValue: selected ? provider : null,
-        onChanged: onChanged == null ? null : (_) => onChanged!(),
+        enabled: enabled,
         secondary: Icon(icon, size: 24),
         title: Text(provider.label),
         subtitle: Text(provider.hint),
