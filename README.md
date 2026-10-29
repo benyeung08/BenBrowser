@@ -199,6 +199,11 @@ tool/            bootstrap、patch_platform、check、analyze_errors、rename
 | 弹窗 pop 后仍用 context | 先取 `messenger` / `navigator` 再 `pop`，否则抛 "deactivated widget's ancestor" |
 | 「取消下载」并不取消 | 改用 `CancelToken`；此前 Dio 仍在后台跑完并把状态覆盖回 done |
 | Windows 更新临时目录泄漏 | 清理责任交给脚本（删整个 tempRoot）；此前只在**失败**分支删，成功时几十 MB 的 zip 永久残留 |
+| `await` 后仍触碰 `ref` | 关闭标签/退出页面会让 widget 在 await 期间卸载，再 `ref.read` 会抛 StateError。已在 6 个文件的异步路径上补齐 `mounted` 守卫 |
+| 同名下载互相覆盖 | 文件名冲突时自动加 `(1)` `(2)` 后缀；此前两个不同地址下载到同名文件，后完成的会悄悄替换先完成的 |
+| 重复点击下载 | 同一地址正在下载时直接复用已有任务；此前会起两个 Dio 写同一个 savePath，导致文件损坏 |
+| 取消后残留半截文件 | 取消时删掉未完成的文件；此前留着，下次「打开」会拿到损坏文件 |
+| 标签到上限无反馈 | `openTab` 改为返回 bool，UI 给出提示；此前静默 return，点「+」毫无反应 |
 | zip 带顶层目录导致静默失效 | 复制源改为 **exe 所在那一层**，否则整个目录被套进安装目录、真正的 exe 不会被替换 |
 
 ### 性能 Performance
@@ -206,7 +211,7 @@ tool/            bootstrap、patch_platform、check、analyze_errors、rename
 - **标签内存**：`IndexedStack` 会同时保留全部标签的 WebView 实例（最多 20 个），Android 上极易 OOM。现按最近使用顺序保留 `maxLiveWebViews`（默认 6）个，超出部分显示占位卡，切回时重新加载。**标签数不超过 6 时行为完全不变**；想要永不挂起就把该常量设成 >= `maxTabs`。
   *Tabs beyond `maxLiveWebViews` (default 6) release their WebView; unchanged behaviour at ≤6 tabs.*
 - **进度刷新**：`onProgressChanged` 一次加载触发上百次，每次都全树重建。现按 5% 台阶节流（首/末态始终上报）。
-- **历史写入**：上限 2000 条时一次全量写入约 300KB；连续访问同一地址现只更新时间，不再重写全表。
+- **历史写入**：上限 2000 条时一次全量写入约 300KB。连续访问同一地址现走快速路径（只改首条时间，省掉 `removeWhere` + 重排），**但仍会整表落盘**——要做成真正的增量写入需要引入 SQLite，对当前规模不划算；更省事的方案是加写入防抖（代价是意外退出时可能丢掉最后几秒的记录），暂未采用。
 - **同步 IO**：`existsSync` / `listSync` / `lengthSync` 改为异步，避免递归目录遍历卡在 UI 线程。
 
 ### 安全与健壮性 Security & robustness
