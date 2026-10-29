@@ -26,6 +26,12 @@ class DownloadsController extends Notifier<List<DownloadTask>> {
 
   Directory? _dirCache;
 
+  /// 每个任务一个 CancelToken。
+  ///
+  /// 之前 cancel() 只改了状态，Dio 的下载仍在后台跑完，
+  /// 结束时还会把状态覆盖回 done —— 表现为「点了取消却下载成功了」。
+  final Map<String, CancelToken> _tokens = <String, CancelToken>{};
+
   Future<Directory> get _downloadDir async {
     final cached = _dirCache;
     if (cached != null) return cached;
@@ -55,6 +61,7 @@ class DownloadsController extends Notifier<List<DownloadTask>> {
       version: version,
     );
     state = [...state, task];
+    _tokens[id] = CancelToken();
     unawaited(_run(task, name));
     return id;
   }
@@ -67,41 +74,63 @@ class DownloadsController extends Notifier<List<DownloadTask>> {
       final file = File(savePath);
       if (await file.exists()) await file.delete();
 
+      final token = _tokens[task.id];
       await Dio().download(
         task.url,
         savePath,
+        cancelToken: token,
         onReceiveProgress: (received, total) {
           _patch(task.id, (t) => t.copyWith(received: received, total: total));
         },
       );
+      // 取消时 Dio 会抛异常，能走到这里说明真的完成了
       _patch(
         task.id,
         (t) => t.copyWith(status: DownloadStatus.done, savePath: savePath),
       );
-    } catch (_) {
-      _patch(task.id, (t) => t.copyWith(status: DownloadStatus.failed));
+    } catch (e) {
+      // 用户主动取消时 Dio 抛的是 DioException(cancel)，不应标成 failed
+      final canceled = e is DioException && e.type == DioExceptionType.cancel;
+      if (!canceled) {
+        _patch(task.id, (t) => t.copyWith(status: DownloadStatus.failed));
+      }
+    } finally {
+      _tokens.remove(task.id);
     }
   }
 
-  void cancel(String id) =>
-      _patch(id, (t) => t.copyWith(status: DownloadStatus.canceled));
+  void cancel(String id) {
+    _tokens[id]?.cancel('用户取消');
+    _tokens.remove(id);
+    _patch(id, (t) => t.copyWith(status: DownloadStatus.canceled));
+  }
 
-  void remove(String id) => state = state.where((t) => t.id != id).toList();
+  void remove(String id) {
+    _tokens[id]?.cancel('任务被移除');
+    _tokens.remove(id);
+    state = state.where((t) => t.id != id).toList();
+  }
 
-  void clearFinished() =>
-      state = state.where((t) => t.status == DownloadStatus.running).toList();
+  void clearFinished() {
+    for (final t in state) {
+      if (t.status != DownloadStatus.running) {
+        _tokens.remove(t.id);
+      }
+    }
+    state = state.where((t) => t.status == DownloadStatus.running).toList();
+  }
 
   /// 普通文件：用系统默认方式打开
   Future<void> open(DownloadTask task) async {
     final path = task.savePath;
-    if (path == null || !File(path).existsSync()) return;
+    if (path == null || !await File(path).exists()) return;
     await OpenFilex.open(path);
   }
 
   /// 安装更新包（Android）。显式带上 MIME，避免部分 ROM 识别不出 APK。
   Future<void> install(DownloadTask task) async {
     final path = task.savePath;
-    if (path == null || !File(path).existsSync()) return;
+    if (path == null || !await File(path).exists()) return;
     await OpenFilex.open(path, type: 'application/vnd.android.package-archive');
   }
 

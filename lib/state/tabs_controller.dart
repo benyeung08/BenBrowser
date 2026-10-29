@@ -10,9 +10,24 @@ class TabsState {
   final List<BrowserTab> tabs;
   final int activeIndex;
 
-  const TabsState({this.tabs = const <BrowserTab>[], this.activeIndex = 0});
+  /// 最近使用顺序，最前面是最近激活过的标签 id。
+  ///
+  /// 用于决定哪些标签可以保留 WebView 实例（详见
+  /// [AppConstants.maxLiveWebViews]）：开太多标签时，最久未使用的会被
+  /// 「挂起」，等重新切回时再重建并重新加载。
+  final List<String> recent;
+
+  const TabsState({
+    this.tabs = const <BrowserTab>[],
+    this.activeIndex = 0,
+    this.recent = const <String>[],
+  });
 
   bool get isEmpty => tabs.isEmpty;
+
+  /// 把 id 提到最近使用的最前面
+  List<String> _touch(List<String> list, String id) =>
+      <String>[id, ...list.where((e) => e != id)];
 
   /// 安全的当前索引（增删标签后不会越界）
   int get safeIndex {
@@ -24,10 +39,41 @@ class TabsState {
 
   BrowserTab? get activeTab => tabs.isEmpty ? null : tabs[safeIndex];
 
-  TabsState copyWith({List<BrowserTab>? tabs, int? activeIndex}) => TabsState(
+  TabsState copyWith({
+    List<BrowserTab>? tabs,
+    int? activeIndex,
+    List<String>? recent,
+  }) =>
+      TabsState(
         tabs: tabs ?? this.tabs,
         activeIndex: activeIndex ?? this.activeIndex,
+        recent: recent ?? this.recent,
       );
+
+  /// 应当保留 WebView 实例的标签 id 集合。
+  ///
+  /// 标签数不超过 [AppConstants.maxLiveWebViews] 时全部保留——
+  /// 日常开两三个标签完全不受影响，行为与之前一致。
+  /// 只有标签真的开多了，才按最近使用顺序砍掉最久未用的。
+  Set<String> get liveTabIds {
+    if (tabs.length <= AppConstants.maxLiveWebViews) {
+      return <String>{for (final t in tabs) t.id};
+    }
+    final keep = <String>{for (final t in tabs) t.id};
+    final ordered = <String>[
+      // 当前标签永远排在最前：正在看的页面被挂起是最糟的体验
+      if (!isEmpty) tabs[safeIndex].id,
+      ...recent.where(keep.contains),
+      ...tabs.map((t) => t.id).where((id) => !recent.contains(id)),
+    ];
+    // 去重保序（当前标签可能同时也在 recent 里）
+    final seen = <String>{};
+    final result = <String>[];
+    for (final id in ordered) {
+      if (seen.add(id)) result.add(id);
+    }
+    return result.take(AppConstants.maxLiveWebViews).toSet();
+  }
 }
 
 final tabsProvider = NotifierProvider<TabsController, TabsState>(
@@ -59,6 +105,7 @@ class TabsController extends Notifier<TabsState> {
     state = state.copyWith(
       tabs: tabs,
       activeIndex: select ? tabs.length - 1 : state.activeIndex,
+      recent: _touch(state.recent, tab.id),
     );
   }
 
@@ -69,13 +116,21 @@ class TabsController extends Notifier<TabsState> {
     final nextActive = tabs.isEmpty
         ? 0
         : state.copyWith(tabs: tabs).safeIndex;
-    state = state.copyWith(tabs: tabs, activeIndex: nextActive);
+    state = state.copyWith(
+      tabs: tabs,
+      activeIndex: nextActive,
+      recent: state.recent.where((e) => e != id).toList(),
+    );
     ref.read(webViewRegistryProvider).remove(id);
   }
 
   void selectTab(int index) {
     if (index < 0 || index >= state.tabs.length) return;
-    state = state.copyWith(activeIndex: index);
+    final id = state.tabs[index].id;
+    state = state.copyWith(
+      activeIndex: index,
+      recent: _touch(state.recent, id),
+    );
   }
 
   void updateTab(String id, BrowserTab Function(BrowserTab) updater) {
@@ -92,7 +147,7 @@ class TabsController extends Notifier<TabsState> {
     for (final t in state.tabs) {
       if (t.id != id) ref.read(webViewRegistryProvider).remove(t.id);
     }
-    state = state.copyWith(tabs: keep, activeIndex: 0);
+    state = state.copyWith(tabs: keep, activeIndex: 0, recent: <String>[id]);
   }
 
   void closeAll() {
