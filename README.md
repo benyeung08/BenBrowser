@@ -187,6 +187,38 @@ tool/            bootstrap、patch_platform、check、analyze_errors、rename
 
 ---
 
+## 代码审查已修问题 / Audit fixes
+
+对全部 Dart 源码做过一轮正确性 / 性能 / 安全审查，以下是已修项与相应的设计取舍。
+*A correctness / performance / security pass over the whole Dart codebase — fixed items and the tradeoffs behind them.*
+
+### 正确性 Correctness
+
+| 问题 Issue | 说明 Detail |
+| --- | --- |
+| 弹窗 pop 后仍用 context | 先取 `messenger` / `navigator` 再 `pop`，否则抛 "deactivated widget's ancestor" |
+| 「取消下载」并不取消 | 改用 `CancelToken`；此前 Dio 仍在后台跑完并把状态覆盖回 done |
+| Windows 更新临时目录泄漏 | 清理责任交给脚本（删整个 tempRoot）；此前只在**失败**分支删，成功时几十 MB 的 zip 永久残留 |
+| zip 带顶层目录导致静默失效 | 复制源改为 **exe 所在那一层**，否则整个目录被套进安装目录、真正的 exe 不会被替换 |
+
+### 性能 Performance
+
+- **标签内存**：`IndexedStack` 会同时保留全部标签的 WebView 实例（最多 20 个），Android 上极易 OOM。现按最近使用顺序保留 `maxLiveWebViews`（默认 6）个，超出部分显示占位卡，切回时重新加载。**标签数不超过 6 时行为完全不变**；想要永不挂起就把该常量设成 >= `maxTabs`。
+  *Tabs beyond `maxLiveWebViews` (default 6) release their WebView; unchanged behaviour at ≤6 tabs.*
+- **进度刷新**：`onProgressChanged` 一次加载触发上百次，每次都全树重建。现按 5% 台阶节流（首/末态始终上报）。
+- **历史写入**：上限 2000 条时一次全量写入约 300KB；连续访问同一地址现只更新时间，不再重写全表。
+- **同步 IO**：`existsSync` / `listSync` / `lengthSync` 改为异步，避免递归目录遍历卡在 UI 线程。
+
+### 安全与健壮性 Security & robustness
+
+- **URL scheme 白名单**：只允许 `http` / `https` / `about`。此前地址栏输入 `file:///...`、`content://...` 能把本地文件读进页面。
+- **bat 脚本路径转义检查**：路径含 `&` `|` `^` `"` 等字符时拒绝更新，而不是拼出行为不确定的脚本。
+- **zip slip 加固**：`isWithin` 的基准改用 `resolveSymbolicLinks()`，防止符号链接绕过。
+- **GitHub 限流**：未鉴权仅 60 次/小时/IP。可用 `--dart-define=GITHUB_TOKEN=ghp_xxx` 提升额度；遇 403/429 给出明确提示而非笼统失败。
+- **全局错误兜底**：新增 `core/error_reporting.dart`，接管 `FlutterError.onError` 与 `PlatformDispatcher.onError`，只做本地记录、**不上报任何用户数据**。
+
+---
+
 ## Android 17（API 37）支持
 
 Android 17 = **API 37**，代号 Cinnamon Bun。补丁脚本自动对齐编译目标，**并且真正适配了它的行为变更**（不只是把数字改成 37）。
@@ -199,8 +231,14 @@ Android 17 = **API 37**，代号 Cinnamon Bun。补丁脚本自动对齐编译�
 | `minSdk` | 29（Android 10） |
 | `ndkVersion` | r28+（16KB 内存分页对齐的最低要求） |
 
-CI 默认**要求 SDK 37 真实存在**，拿不到就直接失败，不做静默降级——降级产出的包名义上支持、实际没适配。临时出包可把 android job 的 `ANDROID_ALLOW_SDK_FALLBACK` 改成 `'true'`。
-*CI **requires SDK 37 to actually exist** and fails hard otherwise — a downgraded build claims support without the adaptations. Set `ANDROID_ALLOW_SDK_FALLBACK: 'true'` on the android job to temporarily ship anyway.*
+**CI 的判据是「产物里真实的 targetSdk」，不是环境里装了什么。** 构建前即便 sdkmanager 拿不到 `android-37`，也不会立刻失败——AGP 有自动下载机制（用的仓库索引通常比 runner 自带的 sdkmanager 新），可能在构建阶段把平台拉下来。构建完成后用 `aapt2 dump badging` 读 APK 实际的 `targetSdkVersion`，不是 37 才报错。
+***CI judges by the **real targetSdk in the artifact**, not by what's installed. Even if `sdkmanager` can't fetch `android-37`, the build isn't aborted up front — AGP auto-downloads SDK packages using a repository index that's usually newer than the runner's bundled sdkmanager. After building, `aapt2 dump badging` reads the APK's actual `targetSdkVersion`; only a non-37 value fails.***
+
+临时出包可把 android job 的 `ANDROID_ALLOW_SDK_FALLBACK` 改成 `'true'`——日志会打出醒目的 warning，且**不会**静默伪装成 Android 17。
+*To ship anyway, set `ANDROID_ALLOW_SDK_FALLBACK: 'true'` on the android job — the log prints a loud warning and does **not** silently pretend to be Android 17.*
+
+> runner 自带的 sdkmanager 若太旧会**看不到** android-37 这个包（它读的 repository 索引较旧）。CI 已先把 `cmdline-tools` 升到最新再拉平台，并把仓库里可用的 platform 列表打印出来便于判断。
+> *An outdated bundled sdkmanager **can't see** the android-37 package (its repository index is old). CI updates `cmdline-tools` first, then fetches the platform, and prints the list of available platforms for diagnosis.*
 
 ### 已适配的行为变更 / Adapted behavior changes
 
@@ -238,6 +276,36 @@ CI 默认**要求 SDK 37 真实存在**，拿不到就直接失败，不做静�
 
 > Google Play 会在 **2027 年 8 月**起强制要求 `targetSdk = 37`。
 > *Google Play will **require `targetSdk = 37` from August 2027**.*
+
+---
+
+## 手动更新文件的陷阱 / Manual file-copy pitfall
+
+**只拷贝 `lib/` 里的单个文件很容易放到错误目录**，后果极具迷惑性：例如把 `sync_service.dart` 放到
+`lib/features/settings/`（正确位置是 `lib/services/`），它里面的 `import '../core/constants.dart'`
+在新路径下根本不存在，analyze 会报一大片 `uri_does_not_exist` / `undefined_class` /
+`undefined_identifier` / `non_type_as_type_argument`——**看着像代码写错，实际只是文件放错了地方**。
+***Copying individual files into `lib/` easily lands them in the wrong directory, and the fallout is deceptive: dropping `sync_service.dart` into `lib/features/settings/` (canonical: `lib/services/`) breaks its `import '../core/constants.dart'`, so analyze floods with `uri_does_not_exist` / `undefined_class` / `non_type_as_type_argument` — **looks like a code bug, is just a misplaced file**.***
+
+**建议整包覆盖而非挑文件替换。** 若已发生，删掉错位副本即可（`tool/check_layout.py` 会自动清理已知情况并报告重名文件，CI 三个 job 都会先跑它）：
+*Prefer overwriting the whole tree over cherry-picking files. If it already happened, delete the stray copies — `tool/check_layout.py` cleans known cases and reports duplicate basenames; all three CI jobs run it first.*
+
+```bash
+# 已出现过两次的错位副本（删掉即可）
+rm -f lib/features/settings/sync_service.dart lib/features/browser/sign_in_form.dart
+rm -f lib/features/browser/account_page.dart lib/features/browser/login_gate.dart
+
+# 通用清理 + 重名检测
+python3 tool/check_layout.py
+```
+
+`tool/check_layout.py` 在 **CI 三个 job 与 `bootstrap.sh` / `bootstrap.ps1`** 中都会先执行，
+所以本地跑 bootstrap 或推 CI 时，错位副本会被自动清掉并留下日志。
+*`tool/check_layout.py` runs first in **all three CI jobs and in `bootstrap.sh` / `bootstrap.ps1`**, so stray copies are cleaned automatically with a log line.*
+
+> 注意 `prefer_const_constructors` 是 **info** 级，CI 用了 `--no-fatal-infos`，不会让构建变红；
+> 只有 `uri_does_not_exist` 那类 **error** 会。看到成片的 `uri_does_not_exist`，先查文件路径，别急着改代码。
+> *`prefer_const_constructors` is **info** level and CI passes `--no-fatal-infos`, so it won't fail the build — only **errors** like `uri_does_not_exist` will. When you see a cluster of `uri_does_not_exist`, check file paths before touching code.*
 
 ---
 
