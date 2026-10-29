@@ -40,7 +40,11 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
               icon: const Icon(Icons.delete_sweep),
               onPressed: () async {
                 final repo = await ref.read(bookmarkRepositoryProvider.future);
+                // await 期间用户可能已经返回上一页 —— 此时 widget 已卸载，
+                // 再用 ref 会抛 StateError("Cannot use ref after disposed")。
+                if (!mounted) return;
                 await repo.clear();
+                if (!mounted) return;
                 ref.invalidate(bookmarksProvider);
               },
             ),
@@ -83,7 +87,9 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
                           onPressed: () async {
                             final repo =
                                 await ref.read(bookmarkRepositoryProvider.future);
+                            if (!mounted) return;
                             await repo.remove(item.id);
+                            if (!mounted) return;
                             ref.invalidate(bookmarksProvider);
                           },
                         ),
